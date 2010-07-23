@@ -56,8 +56,9 @@ QUICK=1
 
 usage()
 {
-	echo `basename $0` \[--audit\]
+	echo `basename $0` \[--audit\] \[--reconfig\]
 	echo \t audit: do an audit of final .config file
+	echo \t reconfig: reconfigure an existing build
 	exit 1
 }
 
@@ -66,36 +67,36 @@ usage()
 decheckpoint()
 {
 
-# if there is an existing ./wrs we have to get it out of the way...
-rm -rf ./wrs
+    # if there is an existing ./wrs we have to get it out of the way...
+    rm -rf ./wrs
 
-TBRANCH=wrs_meta-$RANDOM
-git checkout -b $TBRANCH wrs_meta > /dev/null 2>&1
-if [ $? != 0 ]; then
+    TBRANCH=wrs_meta-$RANDOM
+    git checkout -b $TBRANCH wrs_meta > /dev/null 2>&1
+    if [ $? != 0 ]; then
 	echo creation of temporary branch $TBRANCH failed
 	echo check \"git status\" for possible reason why
 	return 1
-fi
+    fi
 
-merge_base=`git merge-base wrs_meta wrs_base`
-git reset --mixed $merge_base
-if [ $? != 0 ]; then
+    merge_base=`git merge-base wrs_meta wrs_base`
+    git reset --mixed $merge_base
+    if [ $? != 0 ]; then
 	echo Mixed reset on $TBRANCH failed
 	return 1
-fi
+    fi
 
-git checkout $CURRENT > /dev/null 2>&1
-if [ $? != 0 ]; then
+    git checkout $CURRENT > /dev/null 2>&1
+    if [ $? != 0 ]; then
 	echo Switching back to $CURRENT \(with checkpoint data\) failed
-	return 1
-fi
+	    return 1
+    fi
 
-git branch -D $TBRANCH > /dev/null
+    git branch -D $TBRANCH > /dev/null
 
-if [ ! -d $SCRIPT_DIR ]; then
+    if [ ! -d $SCRIPT_DIR ]; then
 	echo checkpoint restore failed, no dir $SCRIPT_DIR found
 	return 1
-fi
+    fi
 
 }
 
@@ -105,89 +106,90 @@ fi
 # So for each branch, we loop over all "users" (i.e. scc leaf'ers).
 run_board_config()
 {
+    # Can't set these until we've unwound the checkpoint and have wrs data.
+    KVER=`cat ./wrs/cfg/kernel-*cache/kver|sed 's/^v//'`
+    WRS_ARCH=`grep WRS_ARCH $SCC | awk '{print $3}'`
+    KPROFILE=`grep WRS_BOARD $SCC | awk '{print $3}'`
+    KTYPE=`grep WRS_KERNEL $SCC | awk '{print $3}'`
+    KTGT=$KPROFILE-$KTYPE
+    META=./wrs/cfg/meta/`basename $SCC .scc`-meta
 
-# Can't set these until we've unwound the checkpoint and have wrs data.
-KVER=`cat ./wrs/cfg/kernel-*cache/kver|sed 's/^v//'`
-WRS_ARCH=`grep WRS_ARCH $SCC | awk '{print $3}'`
-KPROFILE=`grep WRS_BOARD $SCC | awk '{print $3}'`
-KTYPE=`grep WRS_KERNEL $SCC | awk '{print $3}'`
-KTGT=$KPROFILE-$KTYPE
-META=./wrs/cfg/meta/`basename $SCC .scc`-meta
+    # Build system uses linux_BUILD=$(linux_SRC)-$(ktgt)-build
+    # with ktgt=$(kprofile)-$(ktype)
+    # and KERNEL_CONFIG=${kprofile}-${ktype}-config-${LINUX_KERNEL_VERSION}
+    BUILD_DIR=../linux-$KTGT-build
+    CFGFILE=$KTGT-config-$KVER
 
-# Build system uses linux_BUILD=$(linux_SRC)-$(ktgt)-build
-# with ktgt=$(kprofile)-$(ktype)
-# and KERNEL_CONFIG=${kprofile}-${ktype}-config-${LINUX_KERNEL_VERSION}
-BUILD_DIR=../linux-$KTGT-build
-CFGFILE=$KTGT-config-$KVER
-
-if [ "x$WRS_ARCH" == "x" ] ; then
+    if [ "x$WRS_ARCH" == "x" ] ; then
 	echo Couldnt determine architecture from file:
 	echo -e \\t$SCC
 	echo Assuming scc is not a valid BSP endpoint...
 	return 1
-fi
+    fi
 
-# Fixups to match WRS_ARCH onto kernel.org arch
-if [ $WRS_ARCH == "powerpc_64" ]; then
+    # Fixups to match WRS_ARCH onto kernel.org arch
+    if [ $WRS_ARCH == "powerpc_64" ]; then
 	WRS_ARCH=powerpc
-fi
-if [ $WRS_ARCH == "mips64" ]; then
+    fi
+    if [ $WRS_ARCH == "mips64" ]; then
 	WRS_ARCH=mips
-fi
+    fi
 
-if [ -d $BUILD_DIR ]; then
+    if [ -z "$reconfig" ] && [ -d $BUILD_DIR ]; then
 	echo Dir $BUILD_DIR already exists, remove/move
 	echo it if you want to re-run this configuration utility.
 	return 1
-fi
+    fi
 
-mkdir $BUILD_DIR
-if [ $? != 0 ]; then
-	echo Failed to mkdir $BUILD_DIR for final .config file
-	return 1
-fi
+    if [ ! -d $BUILD_DIR ]; then
+	mkdir $BUILD_DIR
+	if [ $? != 0 ]; then
+	    echo Failed to mkdir $BUILD_DIR for final .config file
+	    return 1
+	fi
+    fi
 
-mkdir ./wrs/cfg/$KTGT
-if [ $? != 0 ]; then
+    mkdir ./wrs/cfg/$KTGT
+    if [ $? != 0 ]; then
 	echo Failed to mkdir ./wrs/cfg/$KTGT for config data
 	return 1
-fi
+    fi
 
-if [ ! -f $META ]; then
+    if [ ! -f $META ]; then
 	echo Failed to find meta series $META
 	return 1
-fi
+    fi
 
-kgit-meta -v -k $META
-if [ $? != 0 ]; then
+    kgit-meta -v -k $META
+    if [ $? != 0 ]; then
 	echo Error running the meta series for collecting config data
 	return 1
-fi
+    fi
 
-generate_cfg $CFGFILE /dev/null `pwd` $BUILD_DIR $KTGT
+    generate_cfg $CFGFILE /dev/null `pwd` $BUILD_DIR $KTGT
 
-if [ $? != 0 ]; then
+    if [ $? != 0 ]; then
 	echo creation of pre-processed config data failed
 	return 1
-fi
+    fi
 
-echo "[INFO] Pre-processed cfg file $CFGFILE created."
+    echo "[INFO] Pre-processed cfg file $CFGFILE created."
 
-make ARCH=$WRS_ARCH O=$BUILD_DIR \
+    make ARCH=$WRS_ARCH O=$BUILD_DIR \
 	KBUILD_DEFCONFIG=../../../wrs/cfg/$KTGT/$CFGFILE \
 	defconfig > wrs/cfg/$KTGT/config.log 2>&1
 
-if [ $? != 0 ]; then
+    if [ $? != 0 ]; then
 	echo Kernel LKC processing of raw config data failed \($WRS_ARCH\)
 	echo See wrs/cfg/$KTGT/config.log for details.
 	return 1
-fi
+    fi
 
-echo "[INFO] processing of raw cfg data completed."
+    echo "[INFO] processing of raw cfg data completed."
 
-if [ $QUICK -ne 1 ]; then
+    if [ $QUICK -ne 1 ]; then
 	kconf_check $CFGFILE /dev/null `pwd` $BUILD_DIR $KTGT
-fi
+    fi
 
 cat << EOF
 
@@ -205,23 +207,35 @@ cat << EOF
   as an ARCH=powerpc specific example.
 
 EOF
-return 0
-
+    return 0
 }
 
 #########################  Start here ##########################
 
-if [ $# -gt 1 ]; then
+if [ -z "$1" ]; then
 	usage
+	exit
 fi
 
-if [ $# == 1 ]; then
-	if [ "$1" != "--audit" ]; then
+while [ $# -gt 0 ]; do
+	case "$1" in
+	    --help) 
 		usage
-		exit 1
-	fi
-	QUICK=0
-fi
+		exit
+		;;
+	    --audit)
+		QUICK=0
+		;;
+	    --reconfig)
+		reconfig=t
+		;;
+	    -v) verbose=t
+		;;
+	    *) break
+		;;
+	esac
+	shift
+done
 
 echo "[INFO] Finding user(s) of current branch: $CURRENT"
 
