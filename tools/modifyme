@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# "modifyme" script.
+
+#  Copyright (c) 2010 Wind River Systems, Inc.
+
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License version 2 as
+#  published by the Free Software Foundation.
+
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#  See the GNU General Public License for more details.
+
+#  This script must be run from inside a Linux source directory
+
+usage()
+{
+cat << EOF
+
+    modifyme [branch] <meta_series>
+
+EOF
+}
+
+
+if [ -z "$1" ]; then
+	usage
+	exit
+fi
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	    --help)
+		usage
+		exit
+		;;
+	    --force)
+		force=t
+		;;
+	    -v) verbose=t
+		;;
+	    *) break
+		;;
+	esac
+	shift
+done
+
+branch=$1
+meta_series=$2
+CURRENT=`git branch |grep \*|sed 's/^\* //'`
+
+# Steal the wrs data off of the wrs_meta branch, but dont actually
+# change wrs_meta in the process...
+decheckpoint()
+{
+
+    # if there is an existing ./wrs we have to get it out of the way...
+    rm -rf ./wrs
+
+    TBRANCH=wrs_meta-$RANDOM
+    git checkout -b $TBRANCH wrs_meta > /dev/null 2>&1
+    if [ $? != 0 ]; then
+	echo creation of temporary branch $TBRANCH failed
+	echo check \"git status\" for possible reason why
+	return 1
+    fi
+
+    merge_base=`git merge-base wrs_meta wrs_base`
+    git reset --mixed $merge_base
+    if [ $? != 0 ]; then
+	echo Mixed reset on $TBRANCH failed
+	return 1
+    fi
+
+    git checkout $CURRENT > /dev/null 2>&1
+    if [ $? != 0 ]; then
+	echo Switching back to $CURRENT \(with checkpoint data\) failed
+	    return 1
+    fi
+
+    git branch -D $TBRANCH > /dev/null
+
+    if [ ! -d $SCRIPT_DIR ]; then
+	echo checkpoint restore failed, no dir $SCRIPT_DIR found
+	return 1
+    fi
+}
+
+find_meta_series() {
+	meta_series=`find wrs/cfg/meta -name "$branch*meta"`
+	if [ -z "$meta_series" ]; then
+	    echo "ERROR. Could not locate meta series for $branch"
+	    exit 1
+	fi
+}
+
+do_init() {
+	kgit-meta --init $meta_series
+	if [ $? -ne 0 ]; then
+	    echo "ERROR initializing git tree, exiting"
+	    exit 1
+	fi
+}
+
+do_apply() {
+	kgit-meta -v --continue --apply $meta_series
+	if [ $? -ne 0 ]; then
+	    echo "ERROR. could not update git tree"
+	    exit 1
+	fi
+}
+
+
+if [ -z "$meta_series" ]; then
+    find_meta_series $branch
+fi
+
+decheckpoint
+do_init $meta_series
+do_apply $meta_series
