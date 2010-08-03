@@ -19,7 +19,7 @@ usage()
 {
 cat << EOF
 
-    modifyme [branch] <meta_series>
+    patchme [branch] <meta_series>
 
 EOF
 }
@@ -115,8 +115,11 @@ do_apply() {
 
 if [ -z "$meta_series" ]; then
     find_meta_series $branch
+    if [ -z "$meta_series" ]; then
+	echo "ERROR. Could not find a meta series for $branch"
+	exit 1
+    fi
 fi
 
-decheckpoint
 do_init $meta_series
 do_apply $meta_series
