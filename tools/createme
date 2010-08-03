@@ -89,40 +89,11 @@ decheckpoint()
     fi
 }
 
-gen_includes() {
-    top_dir=$1
-
-    potential=`find $top_dir -maxdepth 3 -type d -name kernel*cache`
-    for dir in $potential; do
-	includes="$include -I $dir"
-    done
-
-    echo $includes
-}
-
 # checks and sets
 check_defconfig() {
 	config=$1
 
 	defconfig=`get_defconfig $arch $config`
-}
-
-do_compile_prep() {
-    rm -f *.sco
-}
-
-do_compile() {
-    top_dir=$1
-
-    do_compile_prep
-    includes=`gen_includes $top_dir`
-    scc -o $ktgt $includes `pwd`/$ktgt.scc
-
-    if [ -e "$ktgt" ]; then
-	bash ./$ktgt > ../$ktgt-meta
-    else
-	echo "ERROR. Could not find an excutable target for $branch"
-    fi
 }
 
 # checks and creates
@@ -132,26 +103,26 @@ check_branch() {
 
 	ktgt=$branch
 
-	git show-ref --quiet --verify -- "refs/heads/$branch"
+	old_pwd=`pwd`
+	git show-ref --quiet --verify -- "refs/heads/$ktgt"
 	if [ $? -eq 1 ]; then
 	    if [ -n "$verbose" ]; then
 		echo "[INFO] branch $branch does not exist ... creating"
 	    fi
 
 	    mkdir -p wrs/cfg/meta/obj
-	    old_pwd=`pwd`
-
 	    cd wrs/cfg/meta/obj
 
 	    echo "branch $ktgt" > $ktgt.scc
+
+	    # only process the defconfig if we are creating the branch, otherwise, 
+	    # you need to add configuration via "updateme"
 	    if [ ! -f $defconfig ]; then
 		cp -f $defconfig .
 	    fi
 
 	    echo "kconf hardware `basename $defconfig`" >> $ktgt.scc
 	    (cd $old_pwd; find -name 'Kconfig' | sed 's/^.\///' > wrs/cfg/meta/obj/hardware.kcf)
-
-	    do_compile $old_pwd
 	fi
 }
 
