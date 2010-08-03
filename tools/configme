@@ -239,11 +239,11 @@ done
 
 echo "[INFO] Finding user(s) of current branch: $CURRENT"
 
-decheckpoint
-if [ $? != 0 ]; then
-	echo Restoring wrs data from wrs_meta branch failed
-	exit 1
-fi
+# decheckpoint
+# if [ $? != 0 ]; then
+#	echo Restoring wrs data from wrs_meta branch failed
+#	exit 1
+# fi
 
 # Note the space and EOL anchor.  We want to find the SCC file where
 # CURRENT is on the far RHS, i.e. the one that created the branch,
