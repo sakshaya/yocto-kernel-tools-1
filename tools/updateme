@@ -1,0 +1,186 @@
+#!/bin/bash
+
+# "updateme" script.
+
+#  Copyright (c) 2010 Wind River Systems, Inc.
+
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License version 2 as
+#  published by the Free Software Foundation.
+
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#  See the GNU General Public License for more details.
+
+#  This script must be run from inside a Linux source directory
+
+usage()
+{
+cat << EOF
+
+    updateme <dirs>
+
+EOF
+}
+
+
+if [ -z "$1" ]; then
+	usage
+	exit
+fi
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	    --help)
+		usage
+		exit
+		;;
+	    --force)
+		force=t
+		;;
+	    -v) verbose=t
+		;;
+	    *) break
+		;;
+	esac
+	shift
+done
+
+command_line_dirs=$@
+CURRENT=`git branch |grep \*|sed 's/^\* //'`
+
+# Steal the wrs data off of the wrs_meta branch, but dont actually
+# change wrs_meta in the process...
+decheckpoint()
+{
+
+    # if there is an existing ./wrs we have to get it out of the way...
+    rm -rf ./wrs
+
+    TBRANCH=wrs_meta-$RANDOM
+    git checkout -b $TBRANCH wrs_meta > /dev/null 2>&1
+    if [ $? != 0 ]; then
+	echo creation of temporary branch $TBRANCH failed
+	echo check \"git status\" for possible reason why
+	return 1
+    fi
+
+    merge_base=`git merge-base wrs_meta wrs_base`
+    git reset --mixed $merge_base
+    if [ $? != 0 ]; then
+	echo Mixed reset on $TBRANCH failed
+	return 1
+    fi
+
+    git checkout $CURRENT > /dev/null 2>&1
+    if [ $? != 0 ]; then
+	echo Switching back to $CURRENT \(with checkpoint data\) failed
+	    return 1
+    fi
+
+    git branch -D $TBRANCH > /dev/null
+
+    if [ ! -d $SCRIPT_DIR ]; then
+	echo checkpoint restore failed, no dir $SCRIPT_DIR found
+	return 1
+    fi
+}
+
+gen_dirs() {
+    top_dir=$1
+
+    potential=`find $top_dir -maxdepth 3 -type d -name kernel*cache`
+    for dir in $potential; do
+	search_dirs="$search_dirs $dir"
+	includes="$includes -I $dir"
+    done
+}
+
+# searches for extra files to build
+find_features() {
+    dirs=$@
+
+    for d in $dirs; do
+	potential=`find $d -maxdepth 1 -type f -name *.scc`
+	extra_features="$extra_features $potential"
+    done
+}
+
+do_compile_prep() {
+    top_dir=$1
+
+    mkdir -p wrs/cfg/meta/obj
+    (cd wrs/cfg/meta/obj
+     rm -f *.sco
+    )
+
+    # updates 'includes' and 'search_dirs'
+    gen_dirs $top_dir
+    includes="-I $top_dir $includes"
+    search_dirs="$top_dir $search_dirs"
+}
+
+search_includes()
+{
+    search_expr=$1
+    parent_leaf=$2
+
+    for dir in $search_dirs; do
+        if [ -n "$tgt" ]; then
+            continue
+        fi
+
+        found=`find $dir/ -regex "$search_expr"`
+        if [ -n "$found" ]; then
+            for f in $found; do
+                if [ -n "$tgt" ]; then
+                    continue
+                fi
+                if [ "$parent_leaf" != "any" ]; then
+                    x=`grep "scc_leaf" $f`
+                    if [ -n "$x" ]; then
+                        echo "$x" | grep -q -w $parent_leaf
+                        if [ $? -eq 0 ]; then
+                            tgt=$f
+                        fi
+                    fi
+                else
+                    tgt=$f
+                fi
+            done
+        fi
+    done
+
+    echo $tgt
+}
+
+do_update() {
+    branch=$1
+    top_dir=$2
+
+    ktgt=$branch
+
+    top_tgt=`search_includes ".*/$ktgt.scc" any`
+    # this builds and applies the meta-series
+    ( cd wrs/cfg/meta/obj
+	scc -o $ktgt $includes $top_tgt $extra_features
+
+	if [ -e "$ktgt" ]; then
+	    bash ./$ktgt > ../$ktgt-meta
+	else
+	    echo "ERROR. Could not find an excutable target for $branch"
+	fi
+    )
+}
+
+
+# decheckpoint
+
+# $PWD is the Linux src directory
+linux_src_dir=`pwd`
+
+
+do_compile_prep $linux_src_dir
+find_features $command_line_dirs
+do_update $CURRENT $linux_src_dir
