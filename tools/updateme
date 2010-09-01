@@ -50,161 +50,156 @@ done
 command_line_dirs=$@
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
 
-# Steal the wrs data off of the wrs_meta branch, but dont actually
-# change wrs_meta in the process...
-decheckpoint()
-{
-
-    # if there is an existing ./wrs we have to get it out of the way...
-    rm -rf ./wrs
-
-    TBRANCH=wrs_meta-$RANDOM
-    git checkout -b $TBRANCH wrs_meta > /dev/null 2>&1
-    if [ $? != 0 ]; then
-	echo creation of temporary branch $TBRANCH failed
-	echo check \"git status\" for possible reason why
-	return 1
-    fi
-
-    merge_base=`git merge-base wrs_meta wrs_base`
-    git reset --mixed $merge_base
-    if [ $? != 0 ]; then
-	echo Mixed reset on $TBRANCH failed
-	return 1
-    fi
-
-    git checkout $CURRENT > /dev/null 2>&1
-    if [ $? != 0 ]; then
-	echo Switching back to $CURRENT \(with checkpoint data\) failed
-	    return 1
-    fi
-
-    git branch -D $TBRANCH > /dev/null
-
-    if [ ! -d $SCRIPT_DIR ]; then
-	echo checkpoint restore failed, no dir $SCRIPT_DIR found
-	return 1
-    fi
-}
-
 gen_dirs() {
-    top_dir=$1
+	top_dir=$1
 
-    potential=`find $top_dir -maxdepth 3 -type d -name kernel*cache`
-    for dir in $potential; do
-	search_dirs="$search_dirs $dir"
-	includes="$includes -I $dir"
-    done
+	potential=`find $top_dir -maxdepth 3 -type d -name kernel*cache`
+	for dir in $potential; do
+	    search_dirs="$search_dirs $dir"
+	    includes="$includes -I $dir"
+	done
 }
 
 # searches for extra files to build
 find_features() {
-    dirs=$@
+	dirs=$@
 
-    for d in $dirs; do
-	potential=`find $d -maxdepth 1 -type f -name *.scc`
-	extra_features="$extra_features $potential"
-    done
+	for d in $dirs; do
+	    potential=`find $d -maxdepth 1 -type f -name *.scc`
+	    extra_features="$extra_features $potential"
+	done
 }
 
 # searches for extra configs to include, only if they haven't
 # been pulled into a .scc file already
 find_configs() {
-    dirs=$@
-
-    for d in $dirs; do
-	potential=`find $d -maxdepth 1 -type f -name *.cfg`
-	for c in $potential; do
-	    b=`basename $c`
-	    f=`readlink -f $c`
-	    # check to see if a .scc file already includes the fragement
-	    grep $b * -q
-	    if [ $? -ne 0 ]; then
-		extra_cfgs="$extra_cfgs $f"
-	    fi
+	dirs=$@
+	
+	for d in $dirs; do
+	    potential=`find $d -maxdepth 1 -type f -name *.cfg`
+	    for c in $potential; do
+		b=`basename $c`
+		f=`readlink -f $c`
+	    	# check to see if a .scc file already includes the fragement
+		grep $b $d/* -q
+		if [ $? -ne 0 ]; then
+		    extra_cfgs="$extra_cfgs $f"
+		fi
+	    done
 	done
-    done
+}
+
+# searches for extra patches to include, only if they haven't
+# been pulled into a .scc file already
+find_patches() {
+	dirs=$@
+	
+	for d in $dirs; do
+	    potential=`find $d -maxdepth 1 -type f -name *.patch`
+	    potential="$potential `find $d -maxdepth 1 -type f -name *.diff`"
+	    potential="$potential `find $d -maxdepth 1 -type f -name *.mbox`"
+	    for c in $potential; do
+		b=`basename $c`
+		f=`readlink -f $c`
+	    	# check to see if a .scc file already includes the patch
+		grep $b $d/* -q
+		if [ $? -ne 0 ]; then
+		    extra_patches="$extra_patches $f"
+		fi
+	    done
+	done
 }
 
 do_compile_prep() {
-    top_dir=$1
+	top_dir=$1
 
-    mkdir -p wrs/cfg/meta/obj
-    (cd wrs/cfg/meta/obj
-     rm -f *.sco
-    )
+	mkdir -p wrs/cfg/meta/obj
+	(cd wrs/cfg/meta/obj
+	    rm -f *.sco
+	)
 
-    # updates 'includes' and 'search_dirs'
-    gen_dirs $top_dir
-    includes="-I $top_dir $includes"
-    search_dirs="$top_dir $search_dirs"
+	# updates 'includes' and 'search_dirs'
+	gen_dirs $top_dir
+	includes="-I $top_dir $includes"
+	search_dirs="$top_dir $search_dirs"
 }
 
 search_includes()
 {
-    search_expr=$1
-    parent_leaf=$2
+	search_expr=$1
+	parent_leaf=$2
 
-    for dir in $search_dirs; do
-        if [ -n "$tgt" ]; then
-            continue
-        fi
+	for dir in $search_dirs; do
+            if [ -n "$tgt" ]; then
+		continue
+            fi
 
-        found=`find $dir/ -regex "$search_expr"`
-        if [ -n "$found" ]; then
-            for f in $found; do
-                if [ -n "$tgt" ]; then
-                    continue
-                fi
-                if [ "$parent_leaf" != "any" ]; then
-                    x=`grep "scc_leaf" $f`
-                    if [ -n "$x" ]; then
-                        echo "$x" | grep -q -w $parent_leaf
-                        if [ $? -eq 0 ]; then
-                            tgt=$f
-                        fi
+            found=`find $dir/ -regex "$search_expr"`
+            if [ -n "$found" ]; then
+		for f in $found; do
+                    if [ -n "$tgt" ]; then
+			continue
                     fi
-                else
-                    tgt=$f
-                fi
-            done
-        fi
-    done
+                    if [ "$parent_leaf" != "any" ]; then
+			x=`grep "scc_leaf" $f`
+			if [ -n "$x" ]; then
+                            echo "$x" | grep -q -w $parent_leaf
+                            if [ $? -eq 0 ]; then
+				tgt=$f
+                            fi
+			fi
+                    else
+			tgt=$f
+                    fi
+		done
+            fi
+	done
 
-    echo $tgt
+	echo $tgt
 }
 
 do_update() {
-    branch=$1
-    top_dir=$2
+	branch=$1
+	top_dir=$2
 
-    ktgt=$branch
+	ktgt=$branch
 
-    top_tgt=`search_includes ".*/$ktgt.scc" any`
-    # this builds and applies the meta-series
-    ( cd wrs/cfg/meta/obj
-	if [ -n "$extra_cfgs" ]; then
-	    for c in $extra_cfgs; do
-		b=`basename $c`
-		cp $c .
-		echo "kconf non-hardware $b" >> auto_feat.scc
-	    done
+	top_tgt=`search_includes ".*/$ktgt.scc" any`
+	# this builds and applies the meta-series
+	( cd wrs/cfg/meta/obj
+	    if [ -n "$extra_cfgs" ]; then
+		for c in $extra_cfgs; do
+		    b=`basename $c`
+		    cp $c .
+		    echo "kconf non-hardware $b" >> auto_feat.scc
+		done
 	    
-	    extra_features="$extra_features auto_feat.scc"
-	fi
+		extra_features="$extra_features auto_feat.scc"
+	    fi
 
-	scc -o $ktgt $includes $top_tgt $extra_features
+	    if [ -n "$extra_patches" ]; then
+		for c in $extra_patches; do
+		    b=`basename $c`
+		    cp $c .
+		    echo "patch $b" >> auto_feat.scc
+		done
+	    
+		echo "$extra_features" | grep -q auto_feat.scc
+		if [ $? -ne 0 ]; then
+		    extra_features="$extra_features auto_feat.scc"
+		fi
+	    fi
 
-	if [ -e "$ktgt" ]; then
-	    bash ./$ktgt > ../$ktgt-meta
-	else
-	    echo "ERROR. Could not find an excutable target for $branch"
-	fi
-    )
+	    scc -o $ktgt $includes $top_tgt $extra_features
+
+	    if [ -e "$ktgt" ]; then
+		bash ./$ktgt > ../$ktgt-meta
+	    else
+		echo "ERROR. Could not find an excutable target for $branch"
+	    fi
+	)
 }
 
-
-# decheckpoint
 
 # $PWD is the Linux src directory
 linux_src_dir=`pwd`
@@ -213,4 +208,5 @@ linux_src_dir=`pwd`
 do_compile_prep $linux_src_dir
 find_features $command_line_dirs
 find_configs $command_line_dirs
+find_patches $command_line_dirs
 do_update $CURRENT $linux_src_dir
