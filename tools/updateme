@@ -47,6 +47,8 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+arch=$1
+shift
 command_line_dirs=$@
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
 
@@ -75,6 +77,21 @@ find_features() {
 find_configs() {
 	dirs=$@
 	
+	# defconfigs should be found first, so fragements can tweak
+	# settings
+	for d in $dirs; do
+	    potential=`find $d -maxdepth 1 -type f -name defconfig`
+	    for c in $potential; do
+		b=`basename $c`
+		f=`readlink -f $c`
+	    	# check to see if a .scc file already includes the fragement
+		grep $b $d/* -q
+		if [ $? -ne 0 ]; then
+		    extra_cfgs="$extra_cfgs $f"
+		fi
+	    done
+	done
+
 	for d in $dirs; do
 	    potential=`find $d -maxdepth 1 -type f -name *.cfg`
 	    for c in $potential; do
@@ -165,6 +182,26 @@ do_update() {
 	ktgt=$branch
 
 	top_tgt=`search_includes ".*/$ktgt.scc" any`
+
+        # if there isn't a target .. we'll need to create one
+	if [ -z "$top_tgt" ]; then
+	    target=`echo $ktgt | cut -d'-' -f1`
+	    parent=`echo $ktgt | cut -d'-' -f2`
+
+	    # we need to generate a baseline configuration
+	    (cd wrs/cfg/meta/obj
+		echo "# auto generated BSP file" > $ktgt.scc
+		echo "define WRS_BOARD $target" >> $ktgt.scc
+		echo "define WRS_KERNEL $parent" >> $ktgt.scc
+		echo "define WRS_ARCH $arch" >> $ktgt.scc
+		echo "" >> $ktgt.scc
+
+		echo "scc_leaf ktypes/$parent $ktgt" >> $ktgt.scc
+	    )
+
+	    top_tgt=wrs/cfg/meta/obj/$ktgt.scc
+	fi
+
 	# this builds and applies the meta-series
 	( cd wrs/cfg/meta/obj
 	    if [ -n "$extra_cfgs" ]; then
