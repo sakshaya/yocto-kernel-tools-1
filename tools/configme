@@ -248,7 +248,7 @@ echo "[INFO] Finding user(s) of current branch: $CURRENT"
 # Note the space and EOL anchor.  We want to find the SCC file where
 # CURRENT is on the far RHS, i.e. the one that created the branch,
 # and NOT some SCC file that uses the branch as a starting point.
-SCC_LIST=`grep -Rl 'scc_leaf.* '$CURRENT'$' ./wrs/cfg/kernel-*cache/bsp/`
+SCC_LIST=`grep -Rl 'scc_leaf.* '$CURRENT'$' ./wrs/cfg/kernel-*cache/bsp/ ./wrs/cfg/meta/obj`
 
 if [ -z "$SCC_LIST" ]; then
 	echo Error: No WRS BSPs \(scc\) use branch $CURRENT as their endpoint.
