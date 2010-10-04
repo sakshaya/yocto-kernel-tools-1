@@ -55,37 +55,8 @@ CURRENT=`git branch |grep \*|sed 's/^\* //'`
 # Steal the wrs data off of the wrs_meta branch, but dont actually
 # change wrs_meta in the process...
 decheckpoint()
-{
-	# if there is an existing ./wrs we have to get it out of the way...
-	rm -rf ./wrs
-
-	TBRANCH=wrs_meta-$RANDOM
-	git checkout -b $TBRANCH wrs_meta > /dev/null 2>&1
-	if [ $? != 0 ]; then
-	    echo creation of temporary branch $TBRANCH failed
-	    echo check \"git status\" for possible reason why
-	    return 1
-	fi
-
-	merge_base=`git merge-base wrs_meta wrs_base`
-	git reset --mixed $merge_base
-	if [ $? != 0 ]; then
-	    echo Mixed reset on $TBRANCH failed
-	    return 1
-	fi
-
-	git checkout $CURRENT > /dev/null 2>&1
-	if [ $? != 0 ]; then
-	    echo Switching back to $CURRENT \(with checkpoint data\) failed
-		return 1
-	fi
-
-	git branch -D $TBRANCH > /dev/null
-	
-	if [ ! -d $SCRIPT_DIR ]; then
-	    echo checkpoint restore failed, no dir $SCRIPT_DIR found
-	    return 1
-	fi
+{	
+	kgit-checkpoint -r
 }
 
 # checks and sets
