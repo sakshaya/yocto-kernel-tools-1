@@ -35,6 +35,10 @@ while [ $# -gt 0 ]; do
 	    --help)
 		usage
 		exit
+	        ;;
+	    --features)
+		cmd_line_features="$2"
+		shift
 		;;
 	    --force)
 		force=t
@@ -47,8 +51,10 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+# arg1 is the ARCH
 arch=$1
 shift
+# everything else is features
 command_line_dirs=$@
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
 
@@ -227,7 +233,7 @@ do_update() {
 		fi
 	    fi
 
-	    scc -o $ktgt $includes $top_tgt $extra_features
+	    scc -o $ktgt $includes $top_tgt $extra_features $addon_features
 
 	    if [ -e "$ktgt" ]; then
 		bash ./$ktgt > ../$ktgt-meta
@@ -237,13 +243,51 @@ do_update() {
 	)
 }
 
+process_args()
+{
+	args=$@
+
+	for a in $args; do
+		if [ -d $a ]; then
+			feature_dirs="$feature_dirs $a"
+		else
+			features_to_find="$features_to_find $a"	
+		fi
+	done
+}
+
+do_addon_features()
+{
+	feats=$@
+
+	for f in $feats; do
+		for d in $search_dirs; do
+			potential=`find $d -name $f`
+			if [ -n "$potential" ]; then
+				addon_features="$addon_features $potential"
+			else
+				if [ -e "$d/$f" ]; then
+					addon_features="$addon_features $d/$f"
+				fi
+			fi
+		done
+	done
+}
+
 
 # $PWD is the Linux src directory
 linux_src_dir=`pwd`
 
-
 do_compile_prep $linux_src_dir
-find_features $command_line_dirs
-find_configs $command_line_dirs
-find_patches $command_line_dirs
+
+# sorts the command line options and returns "feature_dirs" and 
+# "features_to_find"
+process_args $command_line_dirs
+
+find_features $feature_dirs
+find_configs $feature_dirs
+find_patches $feature_dirs
+
+do_addon_features $cmd_line_features $features_to_find
+
 do_update $CURRENT $linux_src_dir
