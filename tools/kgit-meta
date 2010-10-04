@@ -399,17 +399,28 @@ do_branch()
 	# branch doesn't exist. create it.
 	create=t
     fi
+
+    # even if we aren't creating the branch from scratch, it is possible
+    # that it has never been patched before. So let's make sure the 
+    # infrastructure for patching is in place
+    if [ ! -d $wrs_dir/patches/$name ]; then
+	mkdir -p $wrs_dir/patches/$name
+    fi
+    if [ ! -e $wrs_dir/patches/$name/series ]; then	
+ 	touch $wrs_dir/patches/$name/series
+    fi
+    if [ ! -e $wrs_dir/patches/$name/status ]; then
+	touch $wrs_dir/patches/$name/status
+    fi
+
     if [ -n "$create" ]; then
 	if [ "$vlevel" -eq 2 ]; then
 	    echo "      branch ===> $name"
 	fi
-
-	mkdir -p $wrs_dir/patches/$name
 	
 	if [ -n "$last_passed_patch" ]; then
 	    pcommit=`grep $last_passed_patch $status_file | cut -d: -f1`
 	fi
-	
 	
 	track_branch $last_branch
 
@@ -424,34 +435,28 @@ do_branch()
 	active_patching=t
 
 	series_file=$wrs_dir/patches/$name/series
-	if [ -e $wrs_dir/patches/$name/series ]; then
+	if [ -s $wrs_dir/patches/$name/series ]; then
             cat $wrs_dir/patches/$name/series | tr -s / > $wrs_dir/patches/$name/series.new
             mv $wrs_dir/patches/$name/series.new $wrs_dir/patches/$name/series
 	fi
 	status_file=$wrs_dir/patches/$name/status
-	if [ -e $wrs_dir/patches/$name/status ]; then
+	if [ -s $wrs_dir/patches/$name/status ]; then
             cat $wrs_dir/patches/$name/status | tr -s / > $wrs_dir/patches/$name/status.new
             mv $wrs_dir/patches/$name/status.new $wrs_dir/patches/$name/status
 	fi
 
 	patches_dir=$wrs_dir/patches/$name
-
-	if [ ! -d $wrs_dir/patches/$name ]; then
-	    mkdir -p $wrs_dir/patches/$name
-	fi
- 	touch $wrs_dir/patches/$name/status
- 	touch $wrs_dir/patches/$name/series
     else
 	git checkout -q $name
 
 	series_file=$wrs_dir/patches/$name/series
-	if [ -e $wrs_dir/patches/$name/series ]; then
+	if [ -s $wrs_dir/patches/$name/series ]; then
             cat $wrs_dir/patches/$name/series | tr -s / > $wrs_dir/patches/$name/series.new
             mv $wrs_dir/patches/$name/series.new $wrs_dir/patches/$name/series
 	fi
 
 	status_file=$wrs_dir/patches/$name/status
-	if [ -e $wrs_dir/patches/$name/status ]; then
+	if [ -s $wrs_dir/patches/$name/status ]; then
             cat $wrs_dir/patches/$name/status | tr -s / > $wrs_dir/patches/$name/status.new
             mv $wrs_dir/patches/$name/status.new $wrs_dir/patches/$name/status
 	fi
