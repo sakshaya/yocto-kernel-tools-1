@@ -87,26 +87,36 @@ find_configs() {
 	# settings
 	for d in $dirs; do
 	    potential=`find $d -maxdepth 1 -type f -name defconfig`
+	    scc_files=`find $d -maxdepth 1 -type f -name *.scc` 
 	    for c in $potential; do
 		b=`basename $c`
 		f=`readlink -f $c`
 	    	# check to see if a .scc file already includes the fragement
-		grep $b $d/* -q
-		if [ $? -ne 0 ]; then
-		    extra_cfgs="$extra_cfgs $f"
+		if [ -n "$scc_files" ]; then
+			grep $b $d/*.scc -q
+			if [ $? -ne 0 ]; then
+		    		extra_cfgs="$extra_cfgs $f"
+			fi
+		else
+			extra_cfgs="$extra_cfgs $f"
 		fi
 	    done
 	done
 
 	for d in $dirs; do
 	    potential=`find $d -maxdepth 1 -type f -name *.cfg`
+	    scc_files=`find $d -maxdepth 1 -type f -name *.scc` 
 	    for c in $potential; do
 		b=`basename $c`
 		f=`readlink -f $c`
 	    	# check to see if a .scc file already includes the fragement
-		grep $b $d/* -q
-		if [ $? -ne 0 ]; then
-		    extra_cfgs="$extra_cfgs $f"
+		if [ -n "$scc_files" ]; then
+			grep $b $d/* -q
+			if [ $? -ne 0 ]; then
+		    		extra_cfgs="$extra_cfgs $f"
+			fi
+		else
+			extra_cfgs="$extra_cfgs $f"
 		fi
 	    done
 	done
