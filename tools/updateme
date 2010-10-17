@@ -277,7 +277,12 @@ do_addon_features()
 				addon_features="$addon_features $potential"
 			else
 				if [ -e "$d/$f" ]; then
-					addon_features="$addon_features $d/$f"
+				        # if it is a directory, only pass the dir name.
+					if [ -d "$d/$f" ]; then
+						addon_features="$addon_features $f"
+					else
+						addon_features="$addon_features $d/$f"
+					fi
 				fi
 			fi
 		done
