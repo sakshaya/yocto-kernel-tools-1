@@ -80,18 +80,19 @@ check_branch() {
 		echo "[INFO] branch $branch does not exist ... creating"
 	    fi
 
+	    target=${ktgt%-*}
+	    parent=`echo $ktgt | rev | cut -d'-' -f1 | rev`
+	    git checkout -b $ktgt $parent
+	
 	    mkdir -p wrs/cfg/meta/obj
 	    cd wrs/cfg/meta/obj
 
-	    echo "branch $ktgt" > $ktgt.scc
-
 	    # only process the defconfig if we are creating the branch, otherwise, 
 	    # you need to add configuration via "updateme"
-	    if [ ! -f $defconfig ]; then
-		cp -f $defconfig .
+	    if [ -f $defconfig ]; then
+		cp -f $defconfig $old_pwd/../defconfig
 	    fi
 
-	    echo "kconf hardware `basename $defconfig`" >> $ktgt.scc
 	    (cd $old_pwd; find -name 'Kconfig' | sed 's/^.\///' > wrs/cfg/meta/obj/hardware.kcf)
 	fi
 }
