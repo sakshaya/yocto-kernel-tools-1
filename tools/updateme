@@ -201,8 +201,8 @@ do_update() {
 
         # if there isn't a target .. we'll need to create one
 	if [ -z "$top_tgt" ]; then
-	    target=`echo $ktgt | cut -d'-' -f1`
-	    parent=`echo $ktgt | cut -d'-' -f2`
+	    target=${ktgt%-*}
+	    parent=`echo $ktgt | rev | cut -d'-' -f1 | rev`
 
 	    # we need to generate a baseline configuration
 	    (cd wrs/cfg/meta/obj
