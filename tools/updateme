@@ -24,6 +24,7 @@ cat << EOF
 EOF
 }
 
+meta_dir=meta
 
 if [ -z "$1" ]; then
 	usage
@@ -146,8 +147,8 @@ find_patches() {
 do_compile_prep() {
 	top_dir=$1
 
-	mkdir -p wrs/cfg/meta/obj
-	(cd wrs/cfg/meta/obj
+	mkdir -p $meta_dir/cfg/meta/obj
+	(cd $meta_dir/cfg/meta/obj
 	    rm -f *.sco
 	)
 
@@ -161,16 +162,17 @@ search_includes()
 {
 	search_expr=$1
 	parent_leaf=$2
+	search_tgt=
 
 	for dir in $search_dirs; do
-            if [ -n "$tgt" ]; then
+            if [ -n "$search_tgt" ]; then
 		continue
             fi
 
             found=`find $dir/ -regex "$search_expr"`
             if [ -n "$found" ]; then
 		for f in $found; do
-                    if [ -n "$tgt" ]; then
+                    if [ -n "$search_tgt" ]; then
 			continue
                     fi
                     if [ "$parent_leaf" != "any" ]; then
@@ -178,48 +180,62 @@ search_includes()
 			if [ -n "$x" ]; then
                             echo "$x" | grep -q -w $parent_leaf
                             if [ $? -eq 0 ]; then
-				tgt=$f
+				search_tgt=$f
                             fi
 			fi
                     else
-			tgt=$f
+			search_tgt=$f
                     fi
 		done
             fi
 	done
 
-	echo $tgt
+	echo $search_tgt
 }
 
 do_update() {
 	branch=$1
 	top_dir=$2
 
-	ktgt=$branch
+	# we need to condition the branch. If it is in the form that
+	# uses / for inheritance, special processing needs to be done.
+	echo $branch | grep -q "/"
+	if [ $? -eq 0 ]; then
+	    # remove trailing "/base" that won't be in the .scc files themselves
+	    tgt=`echo $branch | sed 's%/base$%%'`
+	    # the parent branch is the second to last, i.e. standard/common_pc
+	    # so we can reverse everything and take the second field
+	    parent=`echo $tgt | rev | cut -d'/' -f2 | rev`
+	    short_branchname=`echo $tgt | rev | cut -d'/' -f1 | rev`
+	    ktgt=$short_branchname-$parent
+	else
+	    ktgt=$branch
+	    short_branchname=$branch
+	    parent=`echo $ktgt | rev | cut -d'-' -f1 | rev`
+	fi
 
 	top_tgt=`search_includes ".*/$ktgt.scc" any`
 
         # if there isn't a target .. we'll need to create one
 	if [ -z "$top_tgt" ]; then
 	    target=${ktgt%-*}
-	    parent=`echo $ktgt | rev | cut -d'-' -f1 | rev`
 
 	    # we need to generate a baseline configuration
-	    (cd wrs/cfg/meta/obj
+	    (cd $meta_dir/cfg/meta/obj
 		echo "# auto generated BSP file" > $ktgt.scc
 		echo "define WRS_BOARD $target" >> $ktgt.scc
 		echo "define WRS_KERNEL $parent" >> $ktgt.scc
 		echo "define WRS_ARCH $arch" >> $ktgt.scc
 		echo "" >> $ktgt.scc
 
-		echo "scc_leaf ktypes/$parent $ktgt" >> $ktgt.scc
+		echo "scc_leaf ktypes/$parent $short_branchname" >> $ktgt.scc
 	    )
 
-	    top_tgt=wrs/cfg/meta/obj/$ktgt.scc
+	    top_tgt=$meta_dir/cfg/meta/obj/$ktgt.scc
 	fi
 
 	# this builds and applies the meta-series
-	( cd wrs/cfg/meta/obj
+	( cd $meta_dir/cfg/meta/obj
 	    if [ -n "$extra_cfgs" ]; then
 		for c in $extra_cfgs; do
 		    b=`basename $c`
@@ -266,13 +282,30 @@ process_args()
 	done
 }
 
+
+_strip_ext()
+{
+    # this isn't quite "basename" we want the full
+    # path, just no extension, i.e. without basename's
+    # habit of removing the last element no matter what
+    local name=$1
+    local ext=$2
+
+    if [ -n "$ext" ]; then
+	echo "$name" | sed "s%$ext$%%"
+    else
+	echo $name
+    fi
+}
+
 do_addon_features()
 {
 	feats=$@
 
 	for f in $feats; do
 		for d in $search_dirs; do
-			potential=`find $d -name $f`
+		        search_feat=`_strip_ext $f .scc`
+			potential=`find $d | grep -E ".*$search_feat.*\.scc"`
 			if [ -n "$potential" ]; then
 				addon_features="$addon_features $potential"
 			else

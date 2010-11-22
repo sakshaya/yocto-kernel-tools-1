@@ -20,6 +20,7 @@
 # For consistent behaviour with "grep -w"
 LC_ALL=C
 export LC_ALL
+meta_dir=meta
 
 usage()
 {
@@ -27,7 +28,7 @@ cat <<EOF
 
  kgit-clean [-b] [-u upstream] [-c]
 
-   Perform cleanup operations on a wrgit repoistory
+   Perform cleanup operations on a prepared repoistory
 
    -b: remove -old branches. unused branches will also be
        removed if an upstream repository is passed
@@ -95,19 +96,19 @@ if [ -n "$consistency_check" ]; then
 
     # check if this is a wind river repo, that's all we can 
     # check. A non wind river repo should just do nothing
-    x=`git show-ref wrs_base`
-    if [ -z "$x" ]; then
+    check_refs=`git tag | grep checkpoint- | head -n1`
+    if [ -z "$check_refs" ]; then
 	return
     fi
 
     # if there isn't a branch status file, we've got nothing
     # to check
-    if [ ! -e "wrs/cfg/branch_status" ]; then
+    if [ ! -e "$meta_dir/cfg/branch_status" ]; then
 	exit
     fi
 
-    for i in `cat wrs/cfg/branch_status | cut -d: -f1 | sort | uniq`; do
-	logged_ref=`grep ^$i: wrs/cfg/branch_status | tail -n 1 | cut -d: -f2`
+    for i in `cat $meta_dir/cfg/branch_status | cut -d: -f1 | sort | uniq`; do
+	logged_ref=`grep ^$i: $meta_dir/cfg/branch_status | tail -n 1 | cut -d: -f2`
 	actual_ref=`git show-ref -h -s $i`
 
 	if [ -n "$actual_ref" ] && [ "$actual_ref" != "$logged_ref" ]; then

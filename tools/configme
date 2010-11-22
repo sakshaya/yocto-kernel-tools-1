@@ -29,75 +29,45 @@
 
 # Return values: zero if a ".config" was created, one otherwise.
 
-# For testing across groups of BSPs (i.e. standard) use the below
-# script.  Note that there may be a couple false failures due to
-# branches that represent shared content across several BSPs, like
-# the cavium or fsl-imx shared branches.
-# (the cat EOF magic is just so I don't have to comment out lines)
-cat > /dev/null << EOF
-
-rm -rf wrs ../linux-*
-git checkout -f wrs_meta 
-for i in `git branch |grep -- '-standard$\|-cgl\|-preempt_rt\|-ecgl'`; do
-	echo $i ; git checkout -f $i
-	~/configme --audit
-	if [ $? != 0 ]; then
-		echo XXXXXXXXXXXXXXX $i failed XXXXXXXXXXXXXXXX
-	fi
-	rm -rf wrs
-done
-
-EOF
-
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
 SCRIPT_DIR=`pwd`/wrs/scripts
 PATH=$SCRIPT_DIR:$PATH
 QUICK=1
+META_DIR=meta
 
 usage()
 {
-	echo `basename $0` \[--audit\] \[--reconfig\]
+	echo `basename $0` \[--audit\] \[--reconfig\] [target]
 	echo \t audit: do an audit of final .config file
 	echo \t reconfig: reconfigure an existing build
+	echo \t target: name of the configuration target
 	exit 1
 }
 
-# Steal the wrs data off of the wrs_meta branch, but dont actually
-# change wrs_meta in the process...
-decheckpoint()
+
+get_branch_name()
 {
+    _meta_series=$1
 
-    # if there is an existing ./wrs we have to get it out of the way...
-    rm -rf ./wrs
-
-    TBRANCH=wrs_meta-$RANDOM
-    git checkout -b $TBRANCH wrs_meta > /dev/null 2>&1
-    if [ $? != 0 ]; then
-	echo creation of temporary branch $TBRANCH failed
-	echo check \"git status\" for possible reason why
-	return 1
+    branchpoints=`cat $_meta_series|grep '_branch_begin\|_force_branch'|awk '{print $3"|"$4}'`
+    if [ -z "$branchpoints" ]; then
+	branchpoints=master
     fi
 
-    merge_base=`git merge-base wrs_meta wrs_base`
-    git reset --mixed $merge_base
-    if [ $? != 0 ]; then
-	echo Mixed reset on $TBRANCH failed
-	return 1
-    fi
+old_ifs=$IFS
+IFS='
+'
+    for i in $branchpoints ; do
+	name=`echo  $i | cut -d'|' -f1`
+	force=`echo $i | cut -d'|' -f2`
+	    
+	# pickup the first forced branch, we'll throw the rest away as
+	# "branches". Meaning they won't have been created as branches
+	# unless multi_branch_divergence was specified
+	branchname="$branchname/$name"
+    done
 
-    git checkout $CURRENT > /dev/null 2>&1
-    if [ $? != 0 ]; then
-	echo Switching back to $CURRENT \(with checkpoint data\) failed
-	    return 1
-    fi
-
-    git branch -D $TBRANCH > /dev/null
-
-    if [ ! -d $SCRIPT_DIR ]; then
-	echo checkpoint restore failed, no dir $SCRIPT_DIR found
-	return 1
-    fi
-
+    echo $branchname
 }
 
 # This is factored out into a function because for a given branch,
@@ -107,12 +77,13 @@ decheckpoint()
 run_board_config()
 {
     # Can't set these until we've unwound the checkpoint and have wrs data.
-    KVER=`cat ./wrs/cfg/kernel-*cache/kver|sed 's/^v//'`
+    KVER=`cat ./$META_DIR/cfg/kernel-*cache/kver|sed 's/^v//'`
     WRS_ARCH=`grep WRS_ARCH $SCC | awk '{print $3}'`
     KPROFILE=`grep WRS_BOARD $SCC | awk '{print $3}'`
     KTYPE=`grep WRS_KERNEL $SCC | awk '{print $3}'`
-    KTGT=$KPROFILE-$KTYPE
-    META=./wrs/cfg/meta/`basename $SCC .scc`-meta
+    # KTGT=$KPROFILE-$KTYPE
+    KTGT=$full_target
+    META=./$META_DIR/cfg/meta/`basename $SCC .scc`-meta
 
     # Build system uses linux_BUILD=$(linux_SRC)-$(ktgt)-build
     # with ktgt=$(kprofile)-$(ktype)
@@ -149,9 +120,9 @@ run_board_config()
 	fi
     fi
 
-    mkdir ./wrs/cfg/$KTGT
+    mkdir -p ./$META_DIR/cfg/$KTGT
     if [ $? != 0 ]; then
-	echo Failed to mkdir ./wrs/cfg/$KTGT for config data
+	echo Failed to mkdir ./$META_DIR/cfg/$KTGT for config data
 	return 1
     fi
 
@@ -165,7 +136,7 @@ run_board_config()
 	echo Error running the meta series for collecting config data
 	return 1
     fi
-
+    KTGT=`get_branch_name $META`
     generate_cfg $CFGFILE /dev/null `pwd` $BUILD_DIR $KTGT
 
     if [ $? != 0 ]; then
@@ -176,12 +147,12 @@ run_board_config()
     echo "[INFO] Pre-processed cfg file $CFGFILE created."
 
     make ARCH=$WRS_ARCH O=$BUILD_DIR \
-	KBUILD_DEFCONFIG=../../../wrs/cfg/$KTGT/$CFGFILE \
-	defconfig > wrs/cfg/$KTGT/config.log 2>&1
+	KBUILD_DEFCONFIG=../../../$META_DIR/cfg/$KTGT/$CFGFILE \
+	defconfig > $META_DIR/cfg/$KTGT/config.log 2>&1
 
     if [ $? != 0 ]; then
 	echo Kernel LKC processing of raw config data failed \($WRS_ARCH\)
-	echo See wrs/cfg/$KTGT/config.log for details.
+	echo See $META_DIR/cfg/$KTGT/config.log for details.
 	return 1
     fi
 
@@ -237,21 +208,48 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-echo "[INFO] Finding user(s) of current branch: $CURRENT"
+# an explicit target to configure may have been passed 
+# (whatever is left over). If something wasn't passed, we configure
+# based on the current branch.
+target=$@
+if [ -z "$target" ]; then
+    echo "[INFO] Finding user(s) of branch \"$CURRENT\""
+    target=$CURRENT
+fi
 
-# decheckpoint
-# if [ $? != 0 ]; then
-#	echo Restoring wrs data from wrs_meta branch failed
-#	exit 1
-# fi
+# we need to condition the branch. If it is in the form that
+# uses / for inheritance, special processing needs to be done.
+echo $target | grep -q "/"
+if [ $? -eq 0 ]; then
+    # remove trailing "/base" that won't be in the .scc files
+    # themselves
+    tgt=`echo $target | sed 's%/base$%%'`
+    # the parent branch is the second to last, i.e. standard/common_pc
+    # so we can reverse everything and take the second field
+    parent=`echo $tgt | rev | cut -d'/' -f2 | rev`
+    target=`echo $tgt | rev | cut -d'/' -f1 | rev`
+    full_target=$target-$parent
+else
+    full_target=$target
+    parent=`echo $target | rev | cut -d'-' -f1 | rev`
+    target=`echo $target | cut -d'-' -f1`
+fi
 
+echo "[INFO] Finding user(s) of target -- $target -- $parent -"
 # Note the space and EOL anchor.  We want to find the SCC file where
 # CURRENT is on the far RHS, i.e. the one that created the branch,
 # and NOT some SCC file that uses the branch as a starting point.
-SCC_LIST=`grep -Rl 'scc_leaf.* '$CURRENT'$' ./wrs/cfg/kernel-*cache/bsp/ ./wrs/cfg/meta/obj`
+SCC_LIST=`grep -Rl 'scc_leaf.* '$target'$' ./$META_DIR/cfg/kernel-*cache/bsp/ ./$META_DIR/cfg/meta/obj`
+for s in $SCC_LIST; do 
+    found=`grep -E "scc_leaf.*$parent" $s`
+    if [ -n "$found" ] && [ -z "$found_scc" ]; then
+	found_scc=$s
+    fi
+done
+SCC_LIST=$found_scc
 
 if [ -z "$SCC_LIST" ]; then
-	echo Error: No WRS BSPs \(scc\) use branch $CURRENT as their endpoint.
+	echo Error: No BSPs \(scc\) use branch $CURRENT as their endpoint.
 	exit 1
 fi
 

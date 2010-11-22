@@ -29,6 +29,7 @@ then
 fi
 full_path=$(dirname $(readlink -f $0));
 export guilt_dont_check_index=t
+show_inheritance_in_branches=t
 
 usage()
 {
@@ -304,7 +305,7 @@ track_branch()
     
     if [ -n "$branch_name" ]; then
 	head_commit=`git show-ref -h -s | head -1`
-	echo "$branch_name:$head_commit" >> $wrs_dir/cfg/branch_status
+	echo "$branch_name:$head_commit" >> $meta_dir/cfg/branch_status
     fi
 }
 
@@ -375,9 +376,17 @@ do_branch()
     local create=
 
     if [ -n "$show_inheritance_in_branches" ]; then
+	# if we have already passed one branch (last_branch is non zero)
+	# then we should log that branch name in current
 	if [ -n "$last_branch" ]; then
-	    suffix=`echo $last_branch | sed 's/.*-\([a-zA-Z0-9_]*\)$/\1/'`
-	    name=$name-$suffix
+	    current=`git branch|grep '^\*'|awk '{print $2}'`
+	    # if a branch has a child it will have been renamed 
+	    # <branch>/base, but in any new branch we create, we
+	    # don't want to be under <branch>/base, we want to 
+	    # be under <branch>, so we remove any instances of
+	    # 'base' that may be in the actual branch name
+	    current_virtual=`echo $current | sed 's%/base%%g'`
+	    name=$current_virtual/$name
 	fi
     fi
 
@@ -394,23 +403,27 @@ do_branch()
 	fi
     fi
 
-    git show-ref --quiet --verify -- "refs/heads/$name";
+
+    git show-ref --quiet --verify -- "refs/heads/$name"
     if [ $? -eq 1 ]; then
-	# branch doesn't exist. create it.
-	create=t
+	git show-ref --quiet --verify -- "refs/heads/$name/base"
+	if [ $? -eq 1 ]; then
+	    # branch doesn't exist. create it.
+	    create=t
+	fi
     fi
 
     # even if we aren't creating the branch from scratch, it is possible
     # that it has never been patched before. So let's make sure the 
     # infrastructure for patching is in place
-    if [ ! -d $wrs_dir/patches/$name ]; then
-	mkdir -p $wrs_dir/patches/$name
+    if [ ! -d $meta_dir/patches/$name ]; then
+	mkdir -p $meta_dir/patches/$name
     fi
-    if [ ! -e $wrs_dir/patches/$name/series ]; then	
- 	touch $wrs_dir/patches/$name/series
+    if [ ! -e $meta_dir/patches/$name/series ]; then	
+ 	touch $meta_dir/patches/$name/series
     fi
-    if [ ! -e $wrs_dir/patches/$name/status ]; then
-	touch $wrs_dir/patches/$name/status
+    if [ ! -e $meta_dir/patches/$name/status ]; then
+	touch $meta_dir/patches/$name/status
     fi
 
     if [ -n "$create" ]; then
@@ -422,6 +435,22 @@ do_branch()
 	    pcommit=`grep $last_passed_patch $status_file | cut -d: -f1`
 	fi
 	
+	# rename the parent branch if required
+	if [ -n "$show_inheritance_in_branches" ]; then
+	    if [ -n "$last_branch" ]; then
+		# if we aren't a 'base' branch and we aren't the first branch
+		# rename to $current/base
+		echo "$current" | grep -q -E "base$"
+		if [ $? -ne 0 ]; then
+		    git branch -M $current $current/base
+		    # we also need to rename the patches directories
+		    mkdir $meta_dir/patches/$current/base
+		    mv $meta_dir/patches/$current/status $meta_dir/patches/$current/base 2> /dev/null
+		    mv $meta_dir/patches/$current/series $meta_dir/patches/$current/base 2> /dev/null
+		fi
+	    fi
+	fi
+
 	track_branch $last_branch
 
 	# we always checkout from the last point on the current branch
@@ -434,34 +463,45 @@ do_branch()
 
 	active_patching=t
 
-	series_file=$wrs_dir/patches/$name/series
-	if [ -s $wrs_dir/patches/$name/series ]; then
-            cat $wrs_dir/patches/$name/series | tr -s / > $wrs_dir/patches/$name/series.new
-            mv $wrs_dir/patches/$name/series.new $wrs_dir/patches/$name/series
+	series_file=$meta_dir/patches/$name/series
+	if [ -s $meta_dir/patches/$name/series ]; then
+            cat $meta_dir/patches/$name/series | tr -s / > $meta_dir/patches/$name/series.new
+            mv $meta_dir/patches/$name/series.new $meta_dir/patches/$name/series
 	fi
-	status_file=$wrs_dir/patches/$name/status
-	if [ -s $wrs_dir/patches/$name/status ]; then
-            cat $wrs_dir/patches/$name/status | tr -s / > $wrs_dir/patches/$name/status.new
-            mv $wrs_dir/patches/$name/status.new $wrs_dir/patches/$name/status
+	status_file=$meta_dir/patches/$name/status
+	if [ -s $meta_dir/patches/$name/status ]; then
+            cat $meta_dir/patches/$name/status | tr -s / > $meta_dir/patches/$name/status.new
+            mv $meta_dir/patches/$name/status.new $meta_dir/patches/$name/status
 	fi
 
-	patches_dir=$wrs_dir/patches/$name
+	patches_dir=$meta_dir/patches/$name
     else
-	git checkout -q $name
-
-	series_file=$wrs_dir/patches/$name/series
-	if [ -s $wrs_dir/patches/$name/series ]; then
-            cat $wrs_dir/patches/$name/series | tr -s / > $wrs_dir/patches/$name/series.new
-            mv $wrs_dir/patches/$name/series.new $wrs_dir/patches/$name/series
-	fi
-
-	status_file=$wrs_dir/patches/$name/status
-	if [ -s $wrs_dir/patches/$name/status ]; then
-            cat $wrs_dir/patches/$name/status | tr -s / > $wrs_dir/patches/$name/status.new
-            mv $wrs_dir/patches/$name/status.new $wrs_dir/patches/$name/status
+	# check to see if the branch exists, if it doesn't then chances
+	# are it was renamed <foo>/base and we should actually follow
+	# that
+	git show-ref --quiet --verify -- "refs/heads/$name"
+	if [ $? -eq 1 ]; then
+	    git show-ref --quiet --verify -- "refs/heads/$name/base"
+	    if [ $? -eq 0 ]; then
+		name=$name/base
+	    fi
 	fi
 	
-	patches_dir=$wrs_dir/patches/$name
+	git checkout -q $name
+
+	series_file=$meta_dir/patches/$name/series
+	if [ -s $meta_dir/patches/$name/series ]; then
+            cat $meta_dir/patches/$name/series | tr -s / > $meta_dir/patches/$name/series.new
+            mv $meta_dir/patches/$name/series.new $meta_dir/patches/$name/series
+	fi
+
+	status_file=$meta_dir/patches/$name/status
+	if [ -s $meta_dir/patches/$name/status ]; then
+            cat $meta_dir/patches/$name/status | tr -s / > $meta_dir/patches/$name/status.new
+            mv $meta_dir/patches/$name/status.new $meta_dir/patches/$name/status
+	fi
+	
+	patches_dir=$meta_dir/patches/$name
 
 	if [ "$vlevel" -eq 2 ]; then
 	    echo "      branch ===> $name (reuse)"
@@ -592,8 +632,22 @@ do_patch()
 		# unify patches and config, this means that all .scc files
 		# and their patches will be linked under the same directory
 		# structure
+                relative_link_count=`echo $series_file | sed 's%^\./%%' | grep -o "/" | wc -l`
+		if [ "$relative_link_count" == "0" ]; then
+		    relative_dir="../../.."
+		else
+		    relative_dir=""
+		    for c in `seq $relative_link_count`; do
+			relative_dir="$relative_dir`echo -n ../`"
+		    done
+		fi
+
 		if [ -d $patches_dir ] && [ ! -d $patches_dir/links ]; then
-    		    $(cd $patches_dir; ln -s ../../cfg links)
+    		    $(cd $patches_dir; 
+                      if [ -f links ]; then
+			  rm -f links
+		      fi 
+		      ln -s $relative_dir/meta/cfg links)
 		fi
 
 		if [ ! -d $patches_dir/$patches_links_dirname ]; then
@@ -644,7 +698,7 @@ do_pending_patches()
 	fi
 
 	if [ -n "$do_background_push" ]; then
-	    ( eval "guilt-push $sname $_redir" ) &
+	    ( eval "GUILT_BASE=meta guilt-push $sname $_redir" ) &
 	    j=$!
 	    trap 'kill -SIGUSR1 $j 2> /dev/null' SIGTERM SIGUSR1 SIGINT EXIT
 
@@ -659,7 +713,7 @@ do_pending_patches()
 	    # cleanup. probably already dead, but to be sure ...
 	    kill -SIGUSR1 $progress_pid 2> /dev/null
 	else
-	    eval "guilt-push $sname $_redir"
+	    eval "GUILT_BASE=meta guilt-push $sname $_redir"
 	    push_code=$?
 	fi	    
 
@@ -719,9 +773,14 @@ do_config_setup()
     fi
 
     git show-ref --quiet --verify -- "refs/heads/$name";
-    if [ $? -eq 1 ]; then
-		echo "[ERROR] \"$1\" requires \"$name\", but branch \"$name\" does not exist."
-		exit 1
+    if [ $? -ne 0 ]; then
+		git show-ref --quiet --verify -- "refs/heads/$name/base";
+		if [ $? -ne 0 ]; then
+			echo "[ERROR] \"$1\" requires \"$name\", but branch \"$name\" does not exist."
+			exit 1
+		else
+		    name="$name/base"
+		fi
     fi
 
     current=`git branch|grep '^\*'|awk '{print $2}'`
@@ -867,8 +926,8 @@ do_meta_series()
     local git_args=""
     local _processing_patches=
     
-    if [ ! "`get_current_git_branch`" == "wrs_base" ]; then
-	git checkout -q wrs_base
+    if [ ! "`get_current_git_branch`" == "$content_branch" ]; then
+	git checkout -q content_branch
     fi
 
     if [ $vlevel -eq 2 ]; then
@@ -1055,14 +1114,16 @@ if [ -n "$_rc_file" ] && [ -e "$_rc_file" ]; then
     done
 fi
 
-wrs_dir=`find_dir wrs`
-if [ -z "$wrs_dir" ]; then
-    echo "ERROR cannot locate 'wrs' directory"
+meta_dir_name=meta
+meta_dir=`find_dir $meta_dir_name`
+content_branch="yocto/base"
+if [ -z "$meta_dir" ]; then
+    echo "ERROR cannot locate '$meta_dir_name' directory"
     exit 1
 fi
 
-work_cfg_dir=$wrs_dir/cfg
-hook_dir=$wrs_dir/scripts
+work_cfg_dir=$meta_dir/cfg
+hook_dir=$meta_dir/scripts
 # work dir is wherever we are running
 work_dir=$mypath
 
@@ -1082,17 +1143,17 @@ if [ -n "$_init" ]; then
 fi
 
 if [ -n "$_meta_series" ]; then
-    if [ ! "$_meta_series" -ef "$wrs_dir/meta-series" ]; then
-	cp $_meta_series $wrs_dir/meta-series
+    if [ ! "$_meta_series" -ef "$meta_dir/meta-series" ]; then
+	cp $_meta_series $meta_dir/meta-series
 
 	if [ $? != 0 ]; then
-	    echo "[ERROR]" cant copy $_meta_series to $wrs_dir/meta-series
+	    echo "[ERROR]" cant copy $_meta_series to $meta_dir/meta-series
 	    exit 1
 	fi
     fi
 fi
 
-get_hooks $wrs_dir/meta-series
+get_hooks $meta_dir/meta-series
 
 #
 # patch: Actually runs the gathered meta data and applies
@@ -1124,8 +1185,8 @@ if [ -n "$_patch_apply" ]; then
     fi
 
     # pass 1: interpret the meta series
-    wrap_meta_series $wrs_dir/meta-series
-    ## do_meta_series $wrs_dir/meta-series patch    
+    wrap_meta_series $meta_dir/meta-series
+    ## do_meta_series $meta_dir/meta-series patch    
 exit
 
     if [ $? -ne 0 ]; then
@@ -1156,7 +1217,7 @@ fi
 # the kernel-cache into the wrs/ dir.
 #
 if [ -n "$_kconf" ]; then
-	_meta_series=$wrs_dir/meta-series
+	_meta_series=$meta_dir/meta-series
 
 	# we need to build our own list of relocation directories
 	rdirs=`cat $_meta_series|grep '^# _reloc_dir' |awk '{print $3}'`
@@ -1193,8 +1254,7 @@ IFS='
 		    branchname=$name
 		else
 		    if [ -n "$show_inheritance_in_branches" ]; then
-			suffix=`echo $branchname | sed 's/.*-\([a-zA-Z0-9_]*\)$/\1/'`
-			branchname=$name-$suffix
+			branchname="$branchname/$name"
 		    else
 			branchname=$name
 		    fi
@@ -1202,30 +1262,30 @@ IFS='
 	    fi
 	done
 
-	mkdir -p $wrs_dir/cfg/$branchname/
+	mkdir -p $meta_dir/cfg/$branchname/
 
 	if [ -z "$_continue" ]; then
-	    rm -f $wrs_dir/cfg/$branchname/{non_,}hdw_frags.txt
-	    rm -f $wrs_dir/cfg/$branchname/$fraglist
+	    rm -f $meta_dir/cfg/$branchname/{non_,}hdw_frags.txt
+	    rm -f $meta_dir/cfg/$branchname/$fraglist
 	    frgs=`cat $_meta_series|grep '^# _kconf' |awk '{print $4}'`
 	    for f in $frgs; do
 		reloc_frag=`make_relocatable $f`
-		echo "$reloc_frag" >> $wrs_dir/cfg/$branchname/$fraglist
+		echo "$reloc_frag" >> $meta_dir/cfg/$branchname/$fraglist
 	    done
 	else
 	    frgs=`cat $_meta_series|grep '^# _kconf' |awk '{print $4}'`
 	    for f in $frgs; do
 		reloc_frag=`make_relocatable $f`
-		echo "$reloc_frag" >> $wrs_dir/cfg/$branchname/$fraglist
+		echo "$reloc_frag" >> $meta_dir/cfg/$branchname/$fraglist
 	    done
 	fi
         cat $_meta_series | grep '^# _kconf' | while read entry; do
 		fragtype=`echo $entry | awk '{print $3}'`
 		fragname=`echo $entry | awk '{print $4}'`
 		if [ x$fragtype = xhardware ]; then
-			echo `make_relocatable $fragname` >> $wrs_dir/cfg/$branchname/hdw_frags.txt
+			echo `make_relocatable $fragname` >> $meta_dir/cfg/$branchname/hdw_frags.txt
 		elif [ x$fragtype = xnon-hardware ]; then
-			echo `make_relocatable $fragname` >> $wrs_dir/cfg/$branchname/non_hdw_frags.txt
+			echo `make_relocatable $fragname` >> $meta_dir/cfg/$branchname/non_hdw_frags.txt
 		else
 			echo "[ERROR] type \"$fragtype\" of file \"$fragname\" is not hardware or non-hardware"
 			exit 1
@@ -1233,5 +1293,5 @@ IFS='
 	done
 IFS=$old_ifs
 
-	do_config_setup $wrs_dir/cfg/$branchname/$fraglist $branchname
+	do_config_setup $meta_dir/cfg/$branchname/$fraglist $branchname
 fi

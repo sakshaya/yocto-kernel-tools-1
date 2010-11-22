@@ -24,7 +24,7 @@ cat << EOF
 EOF
 }
 
-
+meta_dir=meta
 if [ -z "$1" ]; then
 	usage
 	exit
@@ -51,17 +51,17 @@ branch=$1
 meta_series=$2
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
 
-# Steal the wrs data off of the wrs_meta branch, but dont actually
-# change wrs_meta in the process...
+# Expose the data off of the meta branch
 decheckpoint()
 {
 	kgit-checkpoint -r
 }
 
 find_meta_series() {
-	meta_series=`find wrs/cfg/meta -name "$branch*meta"`
+	tgt=$1
+	meta_series=`find $meta_dir/cfg/meta -name "$tgt*meta"`
 	if [ -z "$meta_series" ]; then
-	    echo "ERROR. Could not locate meta series for $branch"
+	    echo "ERROR. Could not locate meta series for $tgt"
 	    exit 1
 	fi
 }
@@ -82,9 +82,22 @@ do_apply() {
 	fi
 }
 
+echo $branch | grep -q "/"
+if [ $? -eq 0 ]; then
+    # remove trailing "/base" since it won't be in the .scc files themselves
+    tgt=`echo $branch | sed 's%/base$%%'`
+    # the parent branch is the second to last, i.e. standard/common_pc
+    # so we can reverse everything and take the second field
+    parent=`echo $tgt | rev | cut -d'/' -f2 | rev`
+    b=`echo $tgt | rev | cut -d'/' -f1 | rev`
+    ktgt=$b-$parent
+else
+    ktgt=$branch
+    parent=`echo $ktgt | rev | cut -d'-' -f1 | rev`
+fi
 
 if [ -z "$meta_series" ]; then
-    find_meta_series $branch
+    find_meta_series $ktgt
     if [ -z "$meta_series" ]; then
 	echo "ERROR. Could not find a meta series for $branch"
 	exit 1

@@ -118,9 +118,16 @@ if [ -z "$checkpoint_msg" ]; then
     checkpoint_msg="checkpoint: `date`"
 fi
 
-# we grab the entire 'wrs' directory unless told otherwise
+# we grab the entire 'meta' directory unless told otherwise
+if [ -d "wrs" ]; then
+    meta_dir=wrs
+fi
+if [ -d "meta" ]; then
+    meta_dir=meta
+fi
+
 if [ -z "$files_to_checkpoint" ]; then
-    dirs_to_checkpoint="wrs/cfg/kernel-*cache wrs/cfg/meta wrs/patches wrs/scripts wrs"
+    dirs_to_checkpoint="$meta_dir/cfg/kernel-*cache $meta_dir/cfg/meta $meta_dir/patches $meta_dir/scripts $meta_dir"
 fi
 
 # save this so we can go back later ...
@@ -174,13 +181,14 @@ if [ -n "$checkpointing" ]; then
     fi
 
     # create a temp branch for the new checkpoint
-    git checkout -q -b $checkpoint_branch-temp wrs_base
+    merge_base=`git merge-base $checkpoint_branch master`
+    git checkout -q -b $checkpoint_branch-temp $merge_base
 
     # Test if we are still checkpointed. We can tell this by
     # noting that afer the switch to this temp branch if the files
-    # like 'wrs' are untracked, since they are only tracked
-    # by wrs_meta.
-    x=`git ls-files -o wrs | head -n1`
+    # like 'meta' are untracked, since they are only tracked
+    # by the meta branch.
+    x=`git ls-files -o $meta_dir | head -n1`
     if [ -z "$x" ]; then
 	# we are fully checkpointed, delete the temp branch
 	# and switch to the actual checkpoint branch to keep
@@ -267,9 +275,9 @@ else # restoring ...
 	echo "Restoring checkpoint from branch $checkpoint_branch"
     fi
 
-    # check if 'wrs' is tracked or not. If it is untracked, we don't
+    # check if '$meta_dir' is tracked or not. If it is untracked, we don't
     # have anything to do.
-    x=`git ls-files -o wrs | head -n1`
+    x=`git ls-files -o $meta_dir | head -n1`
     if [ -n "$x" ]; then
      	echo "checkpoint is already restored, nothing to do"
      	exit 0
@@ -278,8 +286,8 @@ else # restoring ...
     # checkpoint-<branch> is tagged once and then never changes.
     # we considering everything from this tag to the HEAD of
     # its branch part of the checkpoint
-    merge_base=`git merge-base wrs_meta wrs_base`
-    meta_head=`git show-ref -h -s wrs_meta`
+    merge_base=`git merge-base $checkpoint_branch master`
+    meta_head=`git show-ref -h -s $checkpoint_branch`
     # if merge_base and meta_head do NOT match, there are checkpoint commits
 
     if [ "$merge_base" != "$meta_head" ]; then

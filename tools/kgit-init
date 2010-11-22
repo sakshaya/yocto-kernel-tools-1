@@ -53,9 +53,9 @@ install_resources()
     fi
     
     if [ -n "$tools" ]; then
-	mkdir -p $wrs_dir/scripts
+	mkdir -p $meta_dir/scripts
 	for s in $tools; do
- 	    cp $s $wrs_dir/scripts
+ 	    cp $s $meta_dir/scripts
 	done
     fi
 }
@@ -160,11 +160,15 @@ fi
 
 # blindly guess that everything was passed
 src=$1
-base_branch=$2
+initial_branch_point=$2
 dest=$3
 
+meta_dir=meta
+meta_branch=meta
+content_branch=yocto
+
 # now fixup based on zero'd values
-if [ -z "$base_branch" ]; then
+if [ -z "$initial_branch_point" ]; then
     # no source, no branch, just a dest. We'll be
     # reanimating this repo
     dest=$src
@@ -172,8 +176,8 @@ if [ -z "$base_branch" ]; then
 else
     if [ -z "$dest" ]; then
 	# no branch was passed, this is just <src> <dest>
-	dest=$base_branch
-	base_branch=
+	dest=$initial_branch_point
+	initial_branch_point=
     fi
 fi
 
@@ -198,7 +202,7 @@ new_repo=
 existing_but_not_wrs_repo=
 existing_repo=
 if [ -d "$dest/.git" ]; then
-    x=`cd $dest; git show-ref wrs_base`
+    x=`cd $dest; git show-ref $meta_branch`
     if [ -n "$x" ]; then
 	existing_repo=t
     else
@@ -254,32 +258,33 @@ if [ -n "$new_repo" ]; then
 	    else
 		cd $dest
 		git config core.bare false
+		git checkout -f $checkout_opts master
 	    fi
 
 	    if [ -n "$clean" ]; then
 		clean_tgt_repo
 	    fi
 		
-	    # check to see if there is already a wrs_base branch
-	    git show-ref --quiet --verify -- "refs/heads/wrs_base";
+	    # check to see if there is already a content branch
+	    git show-ref --quiet --verify -- "refs/heads/$content_branch";
 	    if [ $? -eq 1 ]; then
-		if [ -n "$verbose" ]; then
-		    echo "[INFO] creating branch wrs_base from $base_branch";
-		else
-		    checkout_opts=-q
-		fi
-		git checkout -f $checkout_opts -b wrs_base $base_branch
-		r=$?
-		if [ $r -ne 0 ]; then
-		    echo [ERROR] git checkout of \"$base_branch\" failed
-		    exit $r
-		fi
+	    	if [ -n "$verbose" ]; then
+	    	    echo "[INFO] creating branch $content_branch from $initial_branch_point";
+	    	else
+	    	    checkout_opts=-q
+	    	fi
+	    	git checkout -f $checkout_opts -b $content_branch $initial_branch_point
+	    	r=$?
+	    	if [ $r -ne 0 ]; then
+	    	    echo [ERROR] git checkout of \"$initial_branch_point\" failed
+	    	    exit $r
+	    	fi
 	    else
-		# change the type of repo ...
-		git checkout -f wrs_base
-		existing_repo=t
-		new_repo=
-		existing_but_not_wrs_repo=
+	    	# change the type of repo ...
+	    	git checkout -f $content_branch
+	    	existing_repo=t
+	    	new_repo=
+	    	existing_but_not_wrs_repo=
 	    fi
 	else
 	    git clone $clone_opt $src $dest
@@ -294,17 +299,17 @@ if [ -n "$new_repo" ]; then
 		clean_tgt_repo
 	    fi
 
-	    git show-ref --quiet --verify -- "refs/heads/wrs_base";
+	    git show-ref --quiet --verify -- "refs/heads/$meta_branch";
 	    if [ $? -eq 1 ]; then
 		if [ -n "$verbose" ]; then
-		    echo "[INFO] creating branch wrs_base from $base_branch";
+		    echo "[INFO] creating branch $meta_branch from $initial_branch_point";
 		else
 		    checkout_opts=-q
 		fi
-		git checkout $checkout_opts -b wrs_base $base_branch
+		git checkout $checkout_opts -b $meta_branch $initial_branch_point
 	    else
 		# change the type of repo ...
-		git checkout wrs_base
+		git checkout $meta_branch
 		existing_repo=t
 	    fi
 	fi
@@ -312,13 +317,12 @@ if [ -n "$new_repo" ]; then
 fi
 
 if [ -n "$new_repo" ] || [ -n "$existing_but_not_wrs_repo" ]; then
-    if [ ! -d "wrs/cfg/meta/obj" ]; then
-	mkdir -p wrs/cfg/meta/obj
+    if [ ! -d "$meta_dir/cfg/meta/obj" ]; then
+	mkdir -p $meta_dir/cfg/meta/obj
     fi
-    if [ ! -d "wrs/patches" ]; then
-	mkdir -p wrs/patches
+    if [ ! -d "$meta_dir/patches" ]; then
+	mkdir -p $meta_dir/patches
     fi
-    wrs_dir=wrs
 
     install_resources
 
@@ -330,15 +334,15 @@ if [ -n "$new_repo" ] || [ -n "$existing_but_not_wrs_repo" ]; then
     # we don't want to commit any links to patches, so just exclude the
     # entire directory
 
-    echo "# nothing to ignore" > wrs/.gitignore
-    echo "*.patch" > wrs/patches/.gitignore
-    echo "*.diff" >> wrs/patches/.gitignore
+    echo "# nothing to ignore" > $meta_dir/.gitignore
+    echo "*.patch" > $meta_dir/patches/.gitignore
+    echo "*.diff" >> $meta_dir/patches/.gitignore
     if [ -e .gitignore ]; then
 	cat .gitignore | sed s%^patches%#patches% | \
             sed s%^series%#series% > .gitignore.tmp
 	mv .gitignore.tmp .gitignore
 	echo "/LDAT_LINUX_PATCHES" >> .gitignore
-	echo "/wrs" >> .gitignore
+	echo "/$meta_dir" >> .gitignore
 	git add .gitignore 
         git commit -m "gitignore: adding Wind River exclusions"
     else
@@ -348,13 +352,14 @@ if [ -n "$new_repo" ] || [ -n "$existing_but_not_wrs_repo" ]; then
     echo "Initial creation marker" > .create_stamp
     git add -f .create_stamp
     git add -f .gitignore
+
     git commit -q -m "$message"
 
     # create a meta-information branch
-    git branch wrs_meta
+    git branch $meta_branch $initial_branch_point
 
     # tag the Wind River base
-    git tag "wrs_`date +%F`"
+    git tag "meta_`date +%F`"
 fi
 
 if [ -n "$existing_repo" ]; then

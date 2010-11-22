@@ -437,7 +437,7 @@ _strip_ext()
 # arg1: string to make safe to call as a shell function
 _safe_funcname()
 {
-    echo $1 | sed -e 's/\./_/g' -e 's/\-/_/g'
+    echo $1 | sed -e 's/\./_/g' -e 's/\-/_/g' -e 's/^\([0-9]\)/xx\1/'
 }
 
 # output to the current script
