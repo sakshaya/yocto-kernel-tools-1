@@ -477,13 +477,18 @@ do_branch()
 	patches_dir=$meta_dir/patches/$name
     else
 	# check to see if the branch exists, if it doesn't then chances
-	# are it was renamed <foo>/base and we should actually follow
-	# that
+	# are it was renamed <foo>/base and we should actually follow that
 	git show-ref --quiet --verify -- "refs/heads/$name"
 	if [ $? -eq 1 ]; then
 	    git show-ref --quiet --verify -- "refs/heads/$name/base"
 	    if [ $? -eq 0 ]; then
+		old_name=$name
 		name=$name/base
+		if [ ! -d $meta_dir/patches/$name ]; then
+		    mkdir -p $meta_dir/patches/$name
+		    mv $meta_dir/patches/$oldname/status $meta_dir/patches/$name 2> /dev/null
+		    mv $meta_dir/patches/$oldname/series $meta_dir/patches/$name 2> /dev/null
+		fi
 	    fi
 	fi
 	
@@ -732,7 +737,7 @@ do_pending_patches()
 do_git()
 {
     local cmd=$@
-    
+
     if [ ! "$_action" = "undo" ]; then
 	type=`echo $cmd | cut -d' ' -f1`
 	parm=`echo $cmd | cut -d' ' -f2`
@@ -755,6 +760,7 @@ do_git()
  		 if [ "$vlevel" -eq 2 ]; then
 		     echo "      * issuing: git $cmd"
 		 fi
+
 		 eval git $cmd
 		 ;;
 	esac
@@ -925,7 +931,7 @@ do_meta_series()
     local _action=$1
     local git_args=""
     local _processing_patches=
-    
+
     if [ ! "`get_current_git_branch`" == "$content_branch" ]; then
 	git checkout -q content_branch
     fi
@@ -1187,7 +1193,6 @@ if [ -n "$_patch_apply" ]; then
     # pass 1: interpret the meta series
     wrap_meta_series $meta_dir/meta-series
     ## do_meta_series $meta_dir/meta-series patch    
-exit
 
     if [ $? -ne 0 ]; then
 	exit 1
