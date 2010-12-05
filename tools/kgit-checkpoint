@@ -118,18 +118,6 @@ if [ -z "$checkpoint_msg" ]; then
     checkpoint_msg="checkpoint: `date`"
 fi
 
-# we grab the entire 'meta' directory unless told otherwise
-if [ -d "wrs" ]; then
-    meta_dir=wrs
-fi
-if [ -d "meta" ]; then
-    meta_dir=meta
-fi
-
-if [ -z "$files_to_checkpoint" ]; then
-    dirs_to_checkpoint="$meta_dir/cfg/kernel-*cache $meta_dir/cfg/meta $meta_dir/patches $meta_dir/scripts $meta_dir"
-fi
-
 # save this so we can go back later ...
 current_branch=`get_current_git_branch`
 
@@ -147,6 +135,20 @@ if [ -n "$check_refs" ]; then
 	checkpoint_branch=
 	checkpoint_tag_name=
     fi
+fi
+
+# we grab the entire 'meta' directory unless told otherwise
+git show $checkpoint_branch:wrs &> /dev/null
+if [ $? -eq 0 ]; then
+    meta_dir=wrs
+    base_branch=base
+else
+    meta_dir=meta
+    base_branch=master
+fi
+
+if [ -z "$files_to_checkpoint" ]; then
+    dirs_to_checkpoint="$meta_dir/cfg/kernel-*cache $meta_dir/cfg/meta $meta_dir/patches $meta_dir/scripts $meta_dir"
 fi
 
 # allow a command line override
@@ -181,7 +183,7 @@ if [ -n "$checkpointing" ]; then
     fi
 
     # create a temp branch for the new checkpoint
-    merge_base=`git merge-base $checkpoint_branch master`
+    merge_base=`git merge-base $checkpoint_branch $base_branch`
     git checkout -q -b $checkpoint_branch-temp $merge_base
 
     # Test if we are still checkpointed. We can tell this by
@@ -286,7 +288,7 @@ else # restoring ...
     # checkpoint-<branch> is tagged once and then never changes.
     # we considering everything from this tag to the HEAD of
     # its branch part of the checkpoint
-    merge_base=`git merge-base $checkpoint_branch master`
+    merge_base=`git merge-base $checkpoint_branch $base_branch`
     meta_head=`git show-ref -h -s $checkpoint_branch`
     # if merge_base and meta_head do NOT match, there are checkpoint commits
 
