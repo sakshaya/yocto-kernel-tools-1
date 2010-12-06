@@ -30,8 +30,14 @@ if [ -d $TOP_BUILD_DIR ]; then
 	# For TARGET_BOARD
 	. $TOP_BUILD_DIR/config.sh
 	WRS_DIR=$TOP_BUILD_DIR/build/$LINUX_BUILD/meta
+	if [ ! -d "$WRS_DIR" ]; then
+	    WRS_DIR=$TOP_BUILD_DIR/build/$LINUX_BUILD/wrs
+	fi
 else
 	WRS_DIR=`pwd`/meta
+	if [ ! -d "$WRS_DIR" ]; then
+	    WRS_DIR=`pwd`/wrs
+	fi
 fi
 
 KCONF_DIR=$WRS_DIR/cfg/$BRANCH

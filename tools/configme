@@ -60,11 +60,19 @@ IFS='
     for i in $branchpoints ; do
 	name=`echo  $i | cut -d'|' -f1`
 	force=`echo $i | cut -d'|' -f2`
-	    
-	# pickup the first forced branch, we'll throw the rest away as
+
+        # pickup the first forced branch, we'll throw the rest away as
 	# "branches". Meaning they won't have been created as branches
 	# unless multi_branch_divergence was specified
-	branchname="$branchname/$name"
+  	if [ -z "$branchname" ]; then
+	    branchname=$name
+	else
+	    if [  "$META_DIR" == "meta" ]; then
+		branchname="$branchname/$name"
+	    else
+		branchname=$name
+	    fi
+	fi
     done
 
     echo $branchname
@@ -136,6 +144,7 @@ run_board_config()
 	echo Error running the meta series for collecting config data
 	return 1
     fi
+
     KTGT=`get_branch_name $META`
     generate_cfg $CFGFILE /dev/null `pwd` $BUILD_DIR $KTGT
 
@@ -229,10 +238,12 @@ if [ $? -eq 0 ]; then
     parent=`echo $tgt | rev | cut -d'/' -f2 | rev`
     target=`echo $tgt | rev | cut -d'/' -f1 | rev`
     full_target=$target-$parent
+    META_DIR=meta
 else
     full_target=$target
     parent=`echo $target | rev | cut -d'-' -f1 | rev`
-    target=`echo $target | cut -d'-' -f1`
+    # target=`echo $target | cut -d'-' -f1`
+    META_DIR=wrs
 fi
 
 echo "[INFO] Finding user(s) of target -- $target -- $parent -"

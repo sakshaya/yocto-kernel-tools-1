@@ -29,7 +29,6 @@ then
 fi
 full_path=$(dirname $(readlink -f $0));
 export guilt_dont_check_index=t
-show_inheritance_in_branches=t
 
 usage()
 {
@@ -703,7 +702,7 @@ do_pending_patches()
 	fi
 
 	if [ -n "$do_background_push" ]; then
-	    ( eval "GUILT_BASE=meta guilt-push $sname $_redir" ) &
+	    ( eval "GUILT_BASE=$meta_dir guilt-push $sname $_redir" ) &
 	    j=$!
 	    trap 'kill -SIGUSR1 $j 2> /dev/null' SIGTERM SIGUSR1 SIGINT EXIT
 
@@ -718,7 +717,7 @@ do_pending_patches()
 	    # cleanup. probably already dead, but to be sure ...
 	    kill -SIGUSR1 $progress_pid 2> /dev/null
 	else
-	    eval "GUILT_BASE=meta guilt-push $sname $_redir"
+	    eval "GUILT_BASE=$meta_dir guilt-push $sname $_redir"
 	    push_code=$?
 	fi	    
 
@@ -1120,9 +1119,16 @@ if [ -n "$_rc_file" ] && [ -e "$_rc_file" ]; then
     done
 fi
 
-meta_dir_name=meta
+if [ -d "wrs" ]; then
+    meta_dir_name=wrs
+    content_branch="wrs_base"
+else
+    meta_dir_name=meta
+    content_branch="yocto/base"
+    show_inheritance_in_branches=t
+fi
+
 meta_dir=`find_dir $meta_dir_name`
-content_branch="yocto/base"
 if [ -z "$meta_dir" ]; then
     echo "ERROR cannot locate '$meta_dir_name' directory"
     exit 1

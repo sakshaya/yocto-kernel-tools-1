@@ -24,7 +24,11 @@ cat << EOF
 EOF
 }
 
-meta_dir=meta
+if [ -d "wrs" ]; then
+    meta_dir=wrs
+else
+    meta_dir=meta
+fi
 
 if [ -z "$1" ]; then
 	usage

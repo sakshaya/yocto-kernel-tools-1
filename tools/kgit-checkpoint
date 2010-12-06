@@ -141,7 +141,7 @@ fi
 git show $checkpoint_branch:wrs &> /dev/null
 if [ $? -eq 0 ]; then
     meta_dir=wrs
-    base_branch=base
+    base_branch=wrs_base
 else
     meta_dir=meta
     base_branch=master
