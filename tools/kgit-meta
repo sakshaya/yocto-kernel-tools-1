@@ -1207,8 +1207,12 @@ if [ -n "$_patch_apply" ]; then
     git checkout -q $orig_branch
     r=$?
     if [ $r -ne 0 ]; then
-	echo [ERROR] git checkout of \"$orig_branch\" failed
-	exit $r
+	git checkout -q $orig_branch/base
+	r=$?
+	if [ $r -ne 0 ]; then
+	    echo [ERROR] git checkout of \"$orig_branch\" failed
+	    exit $r
+	fi
     fi
 fi
 
