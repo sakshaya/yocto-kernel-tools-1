@@ -92,6 +92,7 @@ run_board_config()
     # KTGT=$KPROFILE-$KTYPE
     KTGT=$full_target
     META=./$META_DIR/cfg/meta/`basename $SCC .scc`-meta
+    META_ALT=./$META_DIR/cfg/meta/$KTGT-meta
 
     # Build system uses linux_BUILD=$(linux_SRC)-$(ktgt)-build
     # with ktgt=$(kprofile)-$(ktype)
@@ -135,8 +136,12 @@ run_board_config()
     fi
 
     if [ ! -f $META ]; then
-	echo Failed to find meta series $META
-	return 1
+	if [ ! -f $META_ALT ]; then
+		echo Failed to find meta series $META
+		return 1
+	else
+		META=$META_ALT
+	fi
     fi
 
     kgit-meta -v -k $META
