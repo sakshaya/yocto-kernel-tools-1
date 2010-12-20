@@ -219,6 +219,11 @@ do_update() {
 	fi
 
 	top_tgt=`search_includes ".*/$ktgt.scc" any`
+	if [ -z "$top_tgt" ]; then
+		# try _'s instead of -'s
+		search_pattern=`echo $ktgt | sed 's/-/.\*/g'`
+		top_tgt=`search_includes ".*/$search_pattern.scc" any`
+	fi
 
         # if there isn't a target .. we'll need to create one
 	if [ -z "$top_tgt" ]; then
