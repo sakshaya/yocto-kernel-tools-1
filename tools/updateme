@@ -212,9 +212,9 @@ do_update() {
 	    # we need to generate a baseline configuration
 	    (cd $meta_dir/cfg/meta/obj
 		echo "# auto generated BSP file" > $ktgt.scc
-		echo "define WRS_BOARD $target" >> $ktgt.scc
-		echo "define WRS_KERNEL $parent" >> $ktgt.scc
-		echo "define WRS_ARCH $arch" >> $ktgt.scc
+		echo "define KMACHINE $target" >> $ktgt.scc
+		echo "define KTYPE $parent" >> $ktgt.scc
+		echo "define KARCH $arch" >> $ktgt.scc
 		echo "" >> $ktgt.scc
 
 		echo "scc_leaf ktypes/$parent $short_branchname" >> $ktgt.scc

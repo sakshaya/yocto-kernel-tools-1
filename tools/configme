@@ -91,34 +91,45 @@ run_board_config()
 {
     # Can't set these until we've unwound the checkpoint and have wrs data.
     KVER=`cat ./$META_DIR/cfg/kernel-*cache/kver|sed 's/^v//'`
-    WRS_ARCH=`grep WRS_ARCH $SCC | awk '{print $3}'`
-    KPROFILE=`grep WRS_BOARD $SCC | awk '{print $3}'`
-    KTYPE=`grep WRS_KERNEL $SCC | awk '{print $3}'`
+
+    # Look for standard defines, with compatibility fallbacks
+    KARCH=`grep KARCH $SCC | awk '{print $3}'`
+    if [ -z "$KARCH" ]; then
+	KARCH=`grep WRS_ARCH $SCC | awk '{print $3}'`
+    fi
+    KPROFILE=`grep KMACHINE $SCC | awk '{print $3}'`
+    if [ -z "$KPROFILE" ]; then
+	KPROFILE=`grep WRS_BOARD $SCC | awk '{print $3}'`
+    fi
+    KTYPE=`grep KTYPE $SCC | awk '{print $3}'`
+    if [ -z "$KTYPE" ]; then
+	KTYPE=`grep WRS_KERNEL $SCC | awk '{print $3}'`
+    fi
     # KTGT=$KPROFILE-$KTYPE
     KTGT=$full_tgt
     META=./$META_DIR/cfg/meta/`basename $SCC .scc`-meta
     META_ALT=./$META_DIR/cfg/meta/$KTGT-meta
     META_ALT_ALT=./$META_DIR/cfg/meta/$KTGT-meta
-
+    
     # Build system uses linux_BUILD=$(linux_SRC)-$(ktgt)-build
     # with ktgt=$(kprofile)-$(ktype)
     # and KERNEL_CONFIG=${kprofile}-${ktype}-config-${LINUX_KERNEL_VERSION}
     BUILD_DIR=$out_dir
     CFGFILE=$KTGT-config-$KVER
 
-    if [ "x$WRS_ARCH" == "x" ] ; then
+    if [ "x$KARCH" == "x" ] ; then
 	echo Couldnt determine architecture from file:
 	echo -e \\t$SCC
 	echo Assuming scc is not a valid BSP endpoint...
 	return 1
     fi
 
-    # Fixups to match WRS_ARCH onto kernel.org arch
-    if [ $WRS_ARCH == "powerpc_64" ]; then
-	WRS_ARCH=powerpc
+    # Fixups to match KARCH onto kernel.org arch
+    if [ $KARCH == "powerpc_64" ]; then
+	KARCH=powerpc
     fi
-    if [ $WRS_ARCH == "mips64" ]; then
-	WRS_ARCH=mips
+    if [ $KARCH == "mips64" ]; then
+	KARCH=mips
     fi
 
     if [ -z "$reconfig" ] && [ -d $BUILD_DIR ]; then
@@ -166,12 +177,12 @@ run_board_config()
 
     echo "[INFO] Pre-processed cfg file $CFGFILE created."
 
-    make ARCH=$WRS_ARCH O=$BUILD_DIR \
+    make ARCH=$KARCH O=$BUILD_DIR \
 	KBUILD_DEFCONFIG=../../../$META_DIR/cfg/$KTGT/$CFGFILE \
 	defconfig > $META_DIR/cfg/$KTGT/config.log 2>&1
 
     if [ $? != 0 ]; then
-	echo Kernel LKC processing of raw config data failed \($WRS_ARCH\)
+	echo Kernel LKC processing of raw config data failed \($KARCH\)
 	echo See $META_DIR/cfg/$KTGT/config.log for details.
 	return 1
     fi
@@ -189,9 +200,9 @@ cat << EOF
 ********************************************************************************
 
   To build with this kernel configuration, ensure a suitable toolchain
-  is in your path for $WRS_ARCH, note its common command prefix, and do:
+  is in your path for $KARCH, note its common command prefix, and do:
 
-   make O=$BUILD_DIR ARCH=$WRS_ARCH \\
+   make O=$BUILD_DIR ARCH=$KARCH \\
         CROSS_COMPILE=<cross-compile-prefix>
 
   Prefix is usually "<arch>-wrs-linux-gnu-", i.e. powerpc-wrs-linux-gnu-
