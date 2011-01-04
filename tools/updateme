@@ -164,37 +164,22 @@ do_compile_prep() {
 
 search_includes()
 {
-	search_expr=$1
-	parent_leaf=$2
-	search_tgt=
+	target=$1
+	parent=$2
 
-	for dir in $search_dirs; do
-            if [ -n "$search_tgt" ]; then
-		continue
-            fi
-
-            found=`find $dir/ -regex "$search_expr"`
-            if [ -n "$found" ]; then
-		for f in $found; do
-                    if [ -n "$search_tgt" ]; then
-			continue
-                    fi
-                    if [ "$parent_leaf" != "any" ]; then
-			x=`grep "scc_leaf" $f`
-			if [ -n "$x" ]; then
-                            echo "$x" | grep -q -w $parent_leaf
-                            if [ $? -eq 0 ]; then
-				search_tgt=$f
-                            fi
-			fi
-                    else
-			search_tgt=$f
-                    fi
-		done
-            fi
+	# Note the space and EOL anchor.  We want to find the SCC file where
+	# CURRENT is on the far RHS, i.e. the one that created the branch,
+	# and NOT some SCC file that uses the branch as a starting point.
+	# There is an alternate target, where all _ have been replaced by -
+	alt_target=`echo $target | sed 's/_/.*/g'`
+	SCC_LIST=`grep -Rl -e 'scc_leaf.* '$target'$' -e 'scc_leaf.* '$alt_target'$' $search_dirs`
+	for s in $SCC_LIST; do 
+		found=`grep -E "scc_leaf.*$parent" $s`
+    		if [ -n "$found" ] && [ -z "$found_scc" ]; then
+			found_scc=$s
+    		fi
 	done
-
-	echo $search_tgt
+	echo "$found_scc"
 }
 
 do_update() {
@@ -218,12 +203,7 @@ do_update() {
 	    parent=`echo $ktgt | rev | cut -d'-' -f1 | rev`
 	fi
 
-	top_tgt=`search_includes ".*/$ktgt.scc" any`
-	if [ -z "$top_tgt" ]; then
-		# try _'s instead of -'s
-		search_pattern=`echo $ktgt | sed 's/-/.\*/g'`
-		top_tgt=`search_includes ".*/$search_pattern.scc" any`
-	fi
+	top_tgt=`search_includes $short_branchname $parent`
 
         # if there isn't a target .. we'll need to create one
 	if [ -z "$top_tgt" ]; then
