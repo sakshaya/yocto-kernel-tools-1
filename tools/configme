@@ -30,17 +30,22 @@
 # Return values: zero if a ".config" was created, one otherwise.
 
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
-SCRIPT_DIR=`pwd`/wrs/scripts
+if [ -d `pwd`/wrs/scripts ]; then
+	SCRIPT_DIR=`pwd`/wrs/scripts
+else
+    	SCRIPT_DIR=`pwd`/meta/scripts
+fi
 PATH=$PATH:$SCRIPT_DIR
 QUICK=1
 META_DIR=meta
 
 usage()
 {
-	echo `basename $0` \[--audit\] \[--reconfig\] [target]
+	echo `basename $0` \[--audit\] \[--reconfig\] \[--o <outdir>] [target]
 	echo \t audit: do an audit of final .config file
 	echo \t reconfig: reconfigure an existing build
 	echo \t target: name of the configuration target
+	echo \t outdir: name of the output directory
 	exit 1
 }
 
@@ -90,14 +95,15 @@ run_board_config()
     KPROFILE=`grep WRS_BOARD $SCC | awk '{print $3}'`
     KTYPE=`grep WRS_KERNEL $SCC | awk '{print $3}'`
     # KTGT=$KPROFILE-$KTYPE
-    KTGT=$full_target
+    KTGT=$full_tgt
     META=./$META_DIR/cfg/meta/`basename $SCC .scc`-meta
     META_ALT=./$META_DIR/cfg/meta/$KTGT-meta
+    META_ALT_ALT=./$META_DIR/cfg/meta/$KTGT-meta
 
     # Build system uses linux_BUILD=$(linux_SRC)-$(ktgt)-build
     # with ktgt=$(kprofile)-$(ktype)
     # and KERNEL_CONFIG=${kprofile}-${ktype}-config-${LINUX_KERNEL_VERSION}
-    BUILD_DIR=../linux-$KTGT-build
+    BUILD_DIR=$out_dir
     CFGFILE=$KTGT-config-$KVER
 
     if [ "x$WRS_ARCH" == "x" ] ; then
@@ -137,7 +143,7 @@ run_board_config()
 
     if [ ! -f $META ]; then
 	if [ ! -f $META_ALT ]; then
-		echo Failed to find meta series $META
+		echo Failed to find meta series $META or $META_ALT
 		return 1
 	else
 		META=$META_ALT
@@ -214,6 +220,10 @@ while [ $# -gt 0 ]; do
 	    --reconfig)
 		reconfig=t
 		;;
+	    --output|-o|--o)
+		out_dir=$2
+		shift
+		;;
 	    -v) verbose=t
 		;;
 	    *) break
@@ -242,12 +252,17 @@ if [ $? -eq 0 ]; then
     # so we can reverse everything and take the second field
     parent=`echo $tgt | rev | cut -d'/' -f2 | rev`
     target=`echo $tgt | rev | cut -d'/' -f1 | rev`
-    full_target=$target-$parent
+    if [ -z $out_dir ]; then
+	out_dir=$target-$parent
+    fi
+    full_tgt=$target-$parent
     META_DIR=meta
 else
-    full_target=$target
+    if [ -z $out_dir ]; then
+	out_dir=$target
+    fi
     parent=`echo $target | rev | cut -d'-' -f1 | rev`
-    # target=`echo $target | cut -d'-' -f1`
+    full_tgt=$target
     META_DIR=wrs
 fi
 
