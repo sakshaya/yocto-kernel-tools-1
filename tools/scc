@@ -612,7 +612,7 @@ scc_leaf()
     fi
 }
 
-# example: scc_stage linux-omap-2.6 +wrs_omap_merge
+# example: scc_stage linux-omap-2.6 +omap_merge
 # 
 # Stages a tree for a future merge
 #
