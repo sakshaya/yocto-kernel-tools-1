@@ -58,7 +58,11 @@ done
 
 # arg1 is the ARCH
 arch=$1
+# arg2 is the machine
+machine=$2
 shift
+shift
+
 # everything else is features
 command_line_dirs=$@
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
@@ -166,19 +170,21 @@ search_includes()
 {
 	target=$1
 	parent=$2
+	found_scc=
 
 	# Note the space and EOL anchor.  We want to find the SCC file where
 	# CURRENT is on the far RHS, i.e. the one that created the branch,
 	# and NOT some SCC file that uses the branch as a starting point.
 	# There is an alternate target, where all _ have been replaced by -
 	alt_target=`echo $target | sed 's/_/.*/g'`
-	SCC_LIST=`grep -Rl -e 'scc_leaf.* '$target'$' -e 'scc_leaf.* '$alt_target'$' $search_dirs`
+	SCC_LIST=`find $search_dirs -name '*.scc' | xargs grep -l -e 'scc_leaf.* '$target'$' -e 'scc_leaf.* '$alt_target'$' | sort | uniq`
 	for s in $SCC_LIST; do 
 		found=`grep -E "scc_leaf.*$parent" $s`
-    		if [ -n "$found" ] && [ -z "$found_scc" ]; then
-			found_scc=$s
+    		if [ -n "$found" ]; then
+			found_scc="$found_scc $s"
     		fi
-	done
+	done	
+
 	echo "$found_scc"
 }
 
@@ -204,6 +210,17 @@ do_update() {
 	fi
 
 	top_tgt=`search_includes $short_branchname $parent`
+	# refine the search to the $machine if we have more than one hit
+	for tgt in $top_tgt; do
+	    case `basename $tgt` in
+		$machine*) best_match=$tgt ;;
+                *) other_match=$tgt ;;                
+	    esac
+	done
+	top_tgt=$best_match
+	if [ -z $top_tgt ]; then
+	    top_tgt=$other_match
+	fi
 
         # if there isn't a target .. we'll need to create one
 	if [ -z "$top_tgt" ]; then
@@ -222,6 +239,9 @@ do_update() {
 
 	    top_tgt=$meta_dir/cfg/meta/obj/$ktgt.scc
 	fi
+
+	# store the name of the top level .scc file for future reference
+	echo $top_tgt > $meta_dir/top_tgt
 
 	# this builds and applies the meta-series
 	( cd $meta_dir/cfg/meta/obj
