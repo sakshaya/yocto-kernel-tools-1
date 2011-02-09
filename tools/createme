@@ -24,6 +24,7 @@ cat << EOF
 EOF
 }
 
+
 meta_dir=meta
 if [ -z "$1" ]; then
 	usage
@@ -57,6 +58,12 @@ CURRENT=`git branch |grep \*|sed 's/^\* //'`
 decheckpoint()
 {	
 	kgit-checkpoint -r
+
+	if [ -d wrs ]; then
+		meta_dir=wrs
+	else
+		meta_dir=meta
+	fi
 }
 
 # checks and sets
