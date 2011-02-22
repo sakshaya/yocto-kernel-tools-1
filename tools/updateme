@@ -41,6 +41,11 @@ while [ $# -gt 0 ]; do
 		usage
 		exit
 	        ;;
+	    --feature)
+		cmd_line_features="$cmd_line_features $2"
+		shift
+		;;
+            # depreciated. do not use
 	    --features)
 		cmd_line_features="$2"
 		shift
