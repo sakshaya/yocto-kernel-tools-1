@@ -154,7 +154,9 @@ check_branch() {
 		parent=`echo $ktgt | rev | cut -d'-' -f1 | rev`
 	    fi
 
-	    git checkout -b $ktgt $parent
+	    if [ "$parent" != "$CURRENT" ]; then
+		git checkout -b $ktgt $parent
+	    fi
 	
 	    mkdir -p $meta_dir/cfg/meta/obj
 	    cd $meta_dir/cfg/meta/obj
