@@ -45,6 +45,10 @@ while [ $# -gt 0 ]; do
 		cmd_line_features="$cmd_line_features $2"
 		shift
 		;;
+	    --branch)
+		cmd_line_branch="$2"
+		shift
+		;;
             # depreciated. do not use
 	    --features)
 		cmd_line_features="$2"
@@ -70,7 +74,12 @@ shift
 
 # everything else is features
 command_line_dirs=$@
-CURRENT=`git branch |grep \*|sed 's/^\* //'`
+
+if [ -z "$cmd_line_branch" ]; then
+    CURRENT=`git branch |grep \*|sed 's/^\* //'`
+else
+    CURRENT=$cmd_line_branch
+fi
 
 gen_dirs() {
 	top_dir=$1
