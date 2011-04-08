@@ -441,11 +441,11 @@ do_branch()
 		# rename to $current/base
 		echo "$current" | grep -q -E "base$"
 		if [ $? -ne 0 ]; then
-		    git branch -M $current $current/base
+		    git branch -M $last_branch $last_branch/base
 		    # we also need to rename the patches directories
-		    mkdir $meta_dir/patches/$current/base
-		    mv $meta_dir/patches/$current/status $meta_dir/patches/$current/base 2> /dev/null
-		    mv $meta_dir/patches/$current/series $meta_dir/patches/$current/base 2> /dev/null
+		    mkdir -p $meta_dir/patches/$last_branch/base
+		    mv $meta_dir/patches/$last_branch/status $meta_dir/patches/$last_branch/base 2> /dev/null
+		    mv $meta_dir/patches/$last_branch/series $meta_dir/patches/$last_branch/base 2> /dev/null	
 		fi
 	    fi
 	fi
@@ -455,25 +455,27 @@ do_branch()
 	# we always checkout from the last point on the current branch
 	# for more fine grained branching git should be used directly
 	if [ -z "$force" ]; then
-	    git checkout -q -b $name
+	    git checkout -q -b $name 2> /dev/null
 	else
-	    git checkout -q -b $name $pcommit
+	    git checkout -q -b $name $pcommit 2> /dev/null
 	fi
 
-	active_patching=t
+	if [ $? -eq 0 ]; then
+	    active_patching=t
 
-	series_file=$meta_dir/patches/$name/series
-	if [ -s $meta_dir/patches/$name/series ]; then
-            cat $meta_dir/patches/$name/series | tr -s / > $meta_dir/patches/$name/series.new
-            mv $meta_dir/patches/$name/series.new $meta_dir/patches/$name/series
-	fi
-	status_file=$meta_dir/patches/$name/status
-	if [ -s $meta_dir/patches/$name/status ]; then
-            cat $meta_dir/patches/$name/status | tr -s / > $meta_dir/patches/$name/status.new
-            mv $meta_dir/patches/$name/status.new $meta_dir/patches/$name/status
-	fi
+	    series_file=$meta_dir/patches/$name/series
+	    if [ -s $meta_dir/patches/$name/series ]; then
+		cat $meta_dir/patches/$name/series | tr -s / > $meta_dir/patches/$name/series.new
+		mv $meta_dir/patches/$name/series.new $meta_dir/patches/$name/series
+	    fi
+	    status_file=$meta_dir/patches/$name/status
+	    if [ -s $meta_dir/patches/$name/status ]; then
+		cat $meta_dir/patches/$name/status | tr -s / > $meta_dir/patches/$name/status.new
+		mv $meta_dir/patches/$name/status.new $meta_dir/patches/$name/status
+	    fi
 
-	patches_dir=$meta_dir/patches/$name
+	    patches_dir=$meta_dir/patches/$name
+	fi
     else
 	# check to see if the branch exists, if it doesn't then chances
 	# are it was renamed <foo>/base and we should actually follow that
