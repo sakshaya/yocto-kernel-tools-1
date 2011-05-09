@@ -37,6 +37,9 @@ while [ $# -gt 0 ]; do
 		usage
 		exit
 		;;
+            --disable-meta-gen)
+                must_have_meta=t
+                ;;
 	    --force)
 		force=t
 		;;
@@ -54,19 +57,37 @@ defconfig=$3 # might be empty
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
 repo=
 
-identify_repo()
+check_repo()
 {
+	action=$1
+
 	git show-ref --quiet --verify -- "refs/heads/wrs_meta"
 	if [ $? -eq 0 ]; then
-		echo "meta-data"
-		return
+		meta_branch=wrs_meta
 	fi
 	git show-ref --quiet --verify -- "refs/heads/meta"
 	if [ $? -eq 0 ]; then
-		echo "meta-data"
-		return
+		meta_branch=meta
 	fi
-	echo "external"
+
+	if [ "$action" = "sanitize" ]; then
+		git show-ref --quiet --verify -- "refs/tags/checkpoint-$meta_branch"
+		if [ $? -eq 1 ]; then
+			if [ -n "$must_have_meta" ]; then
+				echo "ERROR. meta data not found, check upstream repo for tags and branches"
+				exit 1
+			else
+				echo "WARNING: checkpoint tag not found, creating .."
+				git tag "checkpoint-$meta_branch"
+			fi
+		fi
+	else
+		if [ -n "$meta_branch" ]; then
+			echo "meta-data"
+		else	    
+			echo "external"
+		fi
+	fi
 }
 
 metaize()
@@ -90,12 +111,17 @@ metaize()
 # change the meta in the process...
 decheckpoint()
 {	
-	case `identify_repo` in
+	check_repo sanitize
+	case `check_repo identify` in
 		meta-data)
 	       		repo=meta-data
 			kgit-checkpoint -r
 			;;
 		external)
+			if [ -n "$must_have_meta" ]; then
+				echo "ERROR. meta data not found. Check upstream kernel for tags and branches"
+				exit 1
+			fi
 			repo=external
 		        metaize
 			;;
