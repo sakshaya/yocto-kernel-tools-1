@@ -54,6 +54,9 @@ while [ $# -gt 0 ]; do
 		cmd_line_features="$2"
 		shift
 		;;
+	    --no-strict)
+		nostrict=t
+		;;
 	    --force)
 		force=t
 		;;
@@ -74,6 +77,12 @@ shift
 
 # everything else is features
 command_line_dirs=$@
+
+# flags. if no-strict wasn't passed on the command line,
+# enable strict processing.
+if [ -z "$nostrict" ]; then
+	strict=t
+fi
 
 if [ -z "$cmd_line_branch" ]; then
     CURRENT=`git branch |grep \*|sed 's/^\* //'`
@@ -329,20 +338,33 @@ do_addon_features()
 		for d in $search_dirs; do
 		        search_feat=`_strip_ext $f .scc`
 			potential=`find $d | grep -E ".*$search_feat.*\.scc"`
+			found_feat=
 			if [ -n "$potential" ]; then
 				addon_features="$addon_features $potential"
+				found_feat="$potential"
 			else
 				if [ -e "$d/$f" ]; then
 				        # if it is a directory, only pass the dir name.
 					if [ -d "$d/$f" ]; then
 						addon_features="$addon_features $f"
+						found_feat="$f"
 					else
 						addon_features="$addon_features $d/$f"
+						found_feat="$d/$f"
 					fi
 				fi
 			fi
 		done
+		if [ -n "$strict" ] && [ -z "$found_feat" ]; then
+			echo "WARNING: addon feature \"$search_feat\" was not found"
+			missing_feat=t
+		fi
 	done
+
+	if [ -n "$missing_feat" ]; then
+		echo "ERROR: required features were not found. aborting"
+		exit 1
+	fi
 }
 
 
