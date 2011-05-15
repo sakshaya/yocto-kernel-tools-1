@@ -361,11 +361,94 @@ do_cfg()
     fi
 }
 
-# If "branch name inheritance is on", we really only requires knowledge of 
-# its start point and end point. So we condense names to be just that, not 
-# just for leaf nodes (BSPs) but for everything.  
+# arg1: the name the caller would like
+# arg2: the current / parent branch
+generate_branch_name()
+{
+    suggested_name=$1
+    last_passed_branch=$2
+
+    all_possible_branches=`cat $meta_dir/meta-series | grep -E "^# _branch_begin" \
+                             | sed 's/^# _branch_begin //'`
+    who_is_last_branch=`echo "$all_possible_branches" | tail -1`
+
+    # if there are more branches to be created, we need to add a /base
+    # onto this branch, or the subsequent ones will have problems.
+    if [ "$who_is_last_branch" != "$suggested_name" ]; then
+	suggested_name="$suggested_name/base"
+    fi
+
+    if [ -n "$show_inheritance_in_branches" ]; then
+	# if we have already passed one branch (last_branch is non zero)
+	# then we should log that branch name in current
+	if [ -n "$last_passed_branch" ]; then
+	    # if a branch has a child it will have been renamed 
+	    # <branch>/base, but in any new branch we create, we
+	    # don't want to be under <branch>/base, we want to 
+	    # be under <branch>, so we remove any instances of
+	    # 'base' that may be in the actual branch name
+	    last_passed_clean=`echo $last_passed_branch | sed 's%/base%%g'`
+	    suggested_name=$last_passed_clean/$suggested_name
+	fi
+    fi
+
+    echo $suggested_name
+}
+
+sanitize_repo_for_branch()
+{
+    suggested_name=$1
+    
+    # Check to see if it would be possible to create this branch
+    target_sub_component=`dirname $suggested_name`
+    existing_branches=`git branch | sed -e 's%^.*\*\ *%%' -e 's%^\ *%%'`
+
+    # question #1: is there a branch with our (branch name - 1 dir chunk) ?
+    #              if yes, that branch needs to become $branch/base
+    if [ "$target_sub_component" != "." ]; then
+	for b in $existing_branches; do
+	    echo $b | grep -q -E "^$target_sub_component$"
+	    if [ $? -eq 0 ]; then
+		parent_rename=$b
+	    fi
+	done
+    fi
+
+    # question #2: is there a branch with our branch name with our name
+    #              as a component of it ? but not our exact branch
+    #              if yes, we must be $suggested_name/base    
+    for b in $existing_branches; do
+	echo $b | grep -q -E "^$suggested_name/"
+	if [ $? -eq 0 ]; then
+	    suggested_rename="$suggested_name/base"
+	fi
+    done
+
+    if [ -n "$suggested_rename" ]; then
+	suggested_name="$suggested_rename"
+    fi
+
+    if [ -n "$parent_rename" ]; then
+        if [ $? -ne 0 ]; then
+            git branch -M $parent_rename $parent_rename/base
+            # we also need to rename the patches directories
+            mkdir -p $meta_dir/patches/$parent_rename/base
+            mv $meta_dir/patches/$parent_rename/status $meta_dir/patches/$parent_rename/base 2> /dev/null
+            mv $meta_dir/patches/$parent_rename/series $meta_dir/patches/$parent_rename/base 2> /dev/null   
+        fi
+    fi
+
+    echo $suggested_name
+}
+
+
+# If branch name inheritance is on, branches will be built up using
+# the notation: <branch><divider><branch>, where <divider> is typically
+# '/' and we end up with: parent/child
+#
 # If "branchname inheritance is off", just call them as they are in the
-# meta series, each branch is standalone.
+# meta series, each branch is stand alone.
+#
 # If you futz with the branch naming here, have a look at "branchpoints" 
 # to make sure it still is OK.
 do_branch()
@@ -374,20 +457,7 @@ do_branch()
     local force=$2
     local create=
 
-    if [ -n "$show_inheritance_in_branches" ]; then
-	# if we have already passed one branch (last_branch is non zero)
-	# then we should log that branch name in current
-	if [ -n "$last_branch" ]; then
-	    current=`git branch|grep '^\*'|awk '{print $2}'`
-	    # if a branch has a child it will have been renamed 
-	    # <branch>/base, but in any new branch we create, we
-	    # don't want to be under <branch>/base, we want to 
-	    # be under <branch>, so we remove any instances of
-	    # 'base' that may be in the actual branch name
-	    current_virtual=`echo $current | sed 's%/base%%g'`
-	    name=$current_virtual/$name
-	fi
-    fi
+    name=`generate_branch_name $1 $last_branch`    
 
     if [ -n "$force" ]; then
 	# if the branches have diverged (i.e. another force)
@@ -402,14 +472,20 @@ do_branch()
 	fi
     fi
 
-
     git show-ref --quiet --verify -- "refs/heads/$name"
     if [ $? -eq 1 ]; then
 	git show-ref --quiet --verify -- "refs/heads/$name/base"
 	if [ $? -eq 1 ]; then
 	    # branch doesn't exist. create it.
 	    create=t
+	else
+	    # we'll want to follow the base branch, so we switch the name
+	    name=$name/base
 	fi
+    fi
+
+    if [ -n "$create" ]; then
+	name=`sanitize_repo_for_branch $name`
     fi
 
     # even if we aren't creating the branch from scratch, it is possible
@@ -432,22 +508,6 @@ do_branch()
 	
 	if [ -n "$last_passed_patch" ]; then
 	    pcommit=`grep $last_passed_patch $status_file | cut -d: -f1`
-	fi
-	
-	# rename the parent branch if required
-	if [ -n "$show_inheritance_in_branches" ]; then
-	    if [ -n "$last_branch" ]; then
-		# if we aren't a 'base' branch and we aren't the first branch
-		# rename to $current/base
-		echo "$current" | grep -q -E "base$"
-		if [ $? -ne 0 ]; then
-		    git branch -M $last_branch $last_branch/base
-		    # we also need to rename the patches directories
-		    mkdir -p $meta_dir/patches/$last_branch/base
-		    mv $meta_dir/patches/$last_branch/status $meta_dir/patches/$last_branch/base 2> /dev/null
-		    mv $meta_dir/patches/$last_branch/series $meta_dir/patches/$last_branch/base 2> /dev/null	
-		fi
-	    fi
 	fi
 
 	track_branch $last_branch
@@ -476,23 +536,7 @@ do_branch()
 
 	    patches_dir=$meta_dir/patches/$name
 	fi
-    else
-	# check to see if the branch exists, if it doesn't then chances
-	# are it was renamed <foo>/base and we should actually follow that
-	git show-ref --quiet --verify -- "refs/heads/$name"
-	if [ $? -eq 1 ]; then
-	    git show-ref --quiet --verify -- "refs/heads/$name/base"
-	    if [ $? -eq 0 ]; then
-		old_name=$name
-		name=$name/base
-		if [ ! -d $meta_dir/patches/$name ]; then
-		    mkdir -p $meta_dir/patches/$name
-		    mv $meta_dir/patches/$oldname/status $meta_dir/patches/$name 2> /dev/null
-		    mv $meta_dir/patches/$oldname/series $meta_dir/patches/$name 2> /dev/null
-		fi
-	    fi
-	fi
-	
+    else	
 	git checkout -q $name
 
 	series_file=$meta_dir/patches/$name/series
@@ -500,7 +544,6 @@ do_branch()
             cat $meta_dir/patches/$name/series | tr -s / > $meta_dir/patches/$name/series.new
             mv $meta_dir/patches/$name/series.new $meta_dir/patches/$name/series
 	fi
-
 	status_file=$meta_dir/patches/$name/status
 	if [ -s $meta_dir/patches/$name/status ]; then
             cat $meta_dir/patches/$name/status | tr -s / > $meta_dir/patches/$name/status.new
@@ -525,20 +568,6 @@ do_branch()
     fi
 
     last_branch=$name
-}
-
-make_relocatable_additive()
-{
-    in_name=$1
-
-    w=$in_name
-    for r in $rdirs; do
-        r=`clean_path $r`  
-	t=`echo $w | sed s%$r%%`
-	w=$t
-    done
-
-    echo $w
 }
 
 make_relocatable()
@@ -567,7 +596,7 @@ do_patch()
 {
     local name=$1
     local push_patch=
-    
+
     local_name=`make_relocatable $name | tr -s /`
 
     add_to_series=
@@ -1200,7 +1229,6 @@ if [ -n "$_patch_apply" ]; then
 
     # pass 1: interpret the meta series
     wrap_meta_series $meta_dir/meta-series
-    ## do_meta_series $meta_dir/meta-series patch    
 
     if [ $? -ne 0 ]; then
 	exit 1
