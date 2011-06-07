@@ -41,15 +41,18 @@ META_DIR=meta
 
 usage()
 {
-	echo "`basename $0` \[--audit\] \[--reconfig\] \[--o <outdir>] [target] [machine]"
-	echo "   audit: do an audit of final .config file"
-	echo "   reconfig: reconfigure an existing build"
-	echo "   target: name of the configuration target (branch)"
-	echo "   machine: specified if multiple machines use target"
-	echo "   outdir: name of the output directory"
-	exit 1
-}
+cat << EOF
 
+    configme [--audit] [--reconfig] [--o <outdir>] [target] [machine]
+
+        audit: do an audit of final .config file
+        reconfig: reconfigure an existing build
+        target: name of the configuration target (branch)
+        machine: specified if multiple machines use target
+        outdir: name of the output directory
+EOF
+exit 1
+}
 
 get_branch_name()
 {
@@ -205,9 +208,6 @@ cat << EOF
 
    make O=$BUILD_DIR ARCH=$KARCH \\
         CROSS_COMPILE=<cross-compile-prefix>
-
-  Prefix is usually "<arch>-wrs-linux-gnu-", i.e. powerpc-wrs-linux-gnu-
-  as an ARCH=powerpc specific example.
 
 EOF
     return 0

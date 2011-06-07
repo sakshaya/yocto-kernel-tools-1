@@ -19,7 +19,24 @@ usage()
 {
 cat << EOF
 
-    updateme <dirs>
+ updateme [--no-strict] [--branch ${kbranch}] [--feature <feature name>] \
+           ${ARCH} ${MACHINE} [features or directories]
+
+      --no-strict: do not error if a passed feature cannot be found
+      --branch:    the branch to process for the machine definition. If not
+                   passed, the current branch will be used
+      --feature:   apply a feature named $feature to the machine description.
+                   The feature must be found in ${WORKDIR}
+       ${ARCH}:    The kernel architecture of the machine. This is used to locate
+                   default options/configuration.
+       ${MACHINE}: The name of the machine. This is used to locate the machine
+                   description created via 'creatme'
+       [features or directories]: A space separated list of features or directories
+                                  to search for features. Any argument that is a
+                                  directory is added to the search dirs. Any argument
+                                  that is not a directory is considered a feature
+                                  name that should be added (similar to --feature,
+                                  which is the preferred method).
 
 EOF
 }
@@ -200,13 +217,19 @@ search_includes()
 	# and NOT some SCC file that uses the branch as a starting point.
 	# There is an alternate target, where all _ have been replaced by -
 	alt_target=`echo $target | sed 's/_/.*/g'`
+	alt_parent=`echo $parent | sed 's/_/.*/g' | sed 's/-/.*/g'`
 	SCC_LIST=`find $search_dirs -name '*.scc' | xargs grep -l -e 'scc_leaf.* '$target'$' -e 'scc_leaf.* '$alt_target'$' | sort | uniq`
 	for s in $SCC_LIST; do 
 		found=`grep -E "scc_leaf.*$parent" $s`
     		if [ -n "$found" ]; then
 			found_scc="$found_scc $s"
+		else
+		    found=`grep -E "scc_leaf.*$alt_parent" $s`
+		    if [ -n "$found" ]; then
+			found_scc="$found_scc $s"
+		    fi
     		fi
-	done	
+	done
 
 	echo "$found_scc"
 }

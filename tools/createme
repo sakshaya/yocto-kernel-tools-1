@@ -19,7 +19,13 @@ usage()
 {
 cat << EOF
 
-    createme <arch> <branch> [defconfig]
+    createme [-v] [--disable-meta-gen] <arch> <branch> [defconfig]
+
+      --disable-meta-gen: do not automatically create meta data
+                          if not already present in the source tree.
+      -v: verbose processing
+      <arch>: the kernel architecture being processed
+      <branch>: repository branch to use or create
 
 EOF
 }

@@ -19,7 +19,14 @@ usage()
 {
 cat << EOF
 
-    patchme [branch] <meta_series>
+    patchme [<branch>] [<meta_series>]
+
+      <branch>: the repository branch to process/patch. If not
+                passed, the current branch will be used.
+ 
+      <meta_series>: the meta series that should be applied to the
+                     tree. If it isn't passed, it will be located 
+                     based on the branch name.
 
 EOF
 }
@@ -55,6 +62,9 @@ done
 branch=$1
 meta_series=$2
 CURRENT=`git branch |grep \*|sed 's/^\* //'`
+if [ -z "$branch" ]; then
+	branch=$CURRENT
+fi
 
 # Expose the data off of the meta branch
 decheckpoint()
