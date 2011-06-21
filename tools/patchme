@@ -74,7 +74,7 @@ decheckpoint()
 
 find_meta_series() {
 	tgt=$1
-	meta_series=`find $meta_dir/cfg/meta -name "$tgt*meta"`
+	meta_series=`find $meta_dir/cfg/scratch -name "$tgt*meta"`
 	if [ -z "$meta_series" ]; then
 	    echo "ERROR. Could not locate meta series for $tgt"
 	    exit 1

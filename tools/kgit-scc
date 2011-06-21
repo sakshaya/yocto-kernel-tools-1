@@ -671,6 +671,9 @@ if [ -n "$apply" ]; then
 		    fi
 		fi
             fi
+	    if [ -n "$verbose" ]; then
+		echo "running: kgit-meta $vflags $extra --apply $meta_dir/$e-meta"
+	    fi
 	    kgit-meta $vflags $extra --apply $meta_dir/$e-meta
 
 	    if [ $? -ne 0 ]; then

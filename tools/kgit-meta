@@ -429,13 +429,11 @@ sanitize_repo_for_branch()
     fi
 
     if [ -n "$parent_rename" ]; then
-        if [ $? -ne 0 ]; then
-            git branch -M $parent_rename $parent_rename/base
-            # we also need to rename the patches directories
-            mkdir -p $meta_dir/patches/$parent_rename/base
-            mv $meta_dir/patches/$parent_rename/status $meta_dir/patches/$parent_rename/base 2> /dev/null
-            mv $meta_dir/patches/$parent_rename/series $meta_dir/patches/$parent_rename/base 2> /dev/null   
-        fi
+        git branch -M $parent_rename $parent_rename/base
+        # we also need to rename the patches directories
+        mkdir -p $meta_dir/patches/$parent_rename/base
+        mv $meta_dir/patches/$parent_rename/status $meta_dir/patches/$parent_rename/base 2> /dev/null
+        mv $meta_dir/patches/$parent_rename/series $meta_dir/patches/$parent_rename/base 2> /dev/null   
     fi
 
     echo $suggested_name

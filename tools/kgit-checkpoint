@@ -148,7 +148,7 @@ else
 fi
 
 if [ -z "$files_to_checkpoint" ]; then
-    dirs_to_checkpoint="$meta_dir/cfg/kernel-*cache $meta_dir/cfg/meta $meta_dir/patches $meta_dir/scripts $meta_dir"
+    dirs_to_checkpoint="$meta_dir/cfg/kernel-*cache $meta_dir/cfg/scratch $meta_dir/patches $meta_dir/scripts $meta_dir"
 fi
 
 # allow a command line override

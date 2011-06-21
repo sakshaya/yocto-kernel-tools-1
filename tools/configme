@@ -111,9 +111,9 @@ run_board_config()
     fi
     # KTGT=$KPROFILE-$KTYPE
     KTGT=$full_tgt
-    META=./$META_DIR/cfg/meta/`basename $SCC .scc`-meta
-    META_ALT=./$META_DIR/cfg/meta/$KTGT-meta
-    META_ALT_ALT=./$META_DIR/cfg/meta/$KTGT-meta
+    META=./$META_DIR/cfg/scratch/`basename $SCC .scc`-meta
+    META_ALT=./$META_DIR/cfg/scratch/$KTGT-meta
+    META_ALT_ALT=./$META_DIR/cfg/scratch/$KTGT-meta
     
     # Build system uses linux_BUILD=$(linux_SRC)-$(ktgt)-build
     # with ktgt=$(kprofile)-$(ktype)
@@ -289,7 +289,7 @@ else
     # There is an alternate target, where all _ have been replaced by -
     alt_target=`echo $target | sed 's/_/.*/g'`
     SCC_LIST=`grep -Rl -e 'scc_leaf.* '$alt_target'$' -e 'scc_leaf.* '$target'$' \
-            ./$META_DIR/cfg/kernel-*cache/bsp/ ./$META_DIR/cfg/meta/obj`
+            ./$META_DIR/cfg/kernel-*cache/bsp/ ./$META_DIR/cfg/scratch`
     for s in $SCC_LIST; do 
 	found=`grep -E "scc_leaf.*$parent" $s`
 	if [ -n "$found" ] && [ -z "$found_scc" ]; then

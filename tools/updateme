@@ -195,8 +195,8 @@ find_patches() {
 do_compile_prep() {
 	top_dir=$1
 
-	mkdir -p $meta_dir/cfg/meta/obj
-	(cd $meta_dir/cfg/meta/obj
+	mkdir -p $meta_dir/cfg/scratch/obj
+	(cd $meta_dir/cfg/scratch/obj
 	    rm -f *.sco
 	)
 
@@ -273,7 +273,7 @@ do_update() {
 	    target=${ktgt%-*}
 
 	    # we need to generate a baseline configuration
-	    (cd $meta_dir/cfg/meta/obj
+	    (cd $meta_dir/cfg/scratch/obj
 		echo "# auto generated BSP file" > $ktgt.scc
 		echo "define KMACHINE $target" >> $ktgt.scc
 		echo "define KTYPE $parent" >> $ktgt.scc
@@ -283,14 +283,14 @@ do_update() {
 		echo "scc_leaf ktypes/$parent $short_branchname" >> $ktgt.scc
 	    )
 
-	    top_tgt=$meta_dir/cfg/meta/obj/$ktgt.scc
+	    top_tgt=$meta_dir/cfg/scratch/obj/$ktgt.scc
 	fi
 
 	# store the name of the top level .scc file for future reference
 	echo $top_tgt > $meta_dir/top_tgt
 
 	# this builds and applies the meta-series
-	( cd $meta_dir/cfg/meta/obj
+	( cd $meta_dir/cfg/scratch/obj
 	    if [ -n "$extra_cfgs" ]; then
 		for c in $extra_cfgs; do
 		    b=`basename $c`

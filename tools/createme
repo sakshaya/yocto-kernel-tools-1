@@ -190,8 +190,8 @@ check_branch() {
 		git checkout -b $ktgt $parent
 	    fi
 	
-	    mkdir -p $meta_dir/cfg/meta/obj
-	    cd $meta_dir/cfg/meta/obj
+	    mkdir -p $meta_dir/cfg/scratch/obj
+	    cd $meta_dir/cfg/scratch/obj
 
 	    # only process the defconfig if we are creating the branch, otherwise, 
 	    # you need to add configuration via "updateme"
@@ -199,7 +199,7 @@ check_branch() {
 		cp -f $defconfig $old_pwd/../defconfig
 	    fi
 
-	    (cd $old_pwd; find -name 'Kconfig' | sed 's/^.\///' > $meta_dir/cfg/meta/obj/hardware.kcf)
+	    (cd $old_pwd; find -name 'Kconfig' | sed 's/^.\///' > $meta_dir/cfg/scratch/obj/hardware.kcf)
 	fi
 }
 

@@ -165,7 +165,7 @@ dest=$3
 
 meta_dir=meta
 meta_branch=meta
-content_branch=yocto
+content_branch=yocto/base
 
 # now fixup based on zero'd values
 if [ -z "$initial_branch_point" ]; then
@@ -317,8 +317,8 @@ if [ -n "$new_repo" ]; then
 fi
 
 if [ -n "$new_repo" ] || [ -n "$existing_but_flat_repo" ]; then
-    if [ ! -d "$meta_dir/cfg/meta/obj" ]; then
-	mkdir -p $meta_dir/cfg/meta/obj
+    if [ ! -d "$meta_dir/cfg/scratch/obj" ]; then
+	mkdir -p $meta_dir/cfg/scratch/obj
     fi
     if [ ! -d "$meta_dir/patches" ]; then
 	mkdir -p $meta_dir/patches
