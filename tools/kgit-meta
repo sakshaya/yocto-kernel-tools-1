@@ -372,13 +372,13 @@ generate_branch_name()
                              | sed 's/^# _branch_begin //'`
     who_is_last_branch=`echo "$all_possible_branches" | tail -1`
 
-    # if there are more branches to be created, we need to add a /base
-    # onto this branch, or the subsequent ones will have problems.
-    if [ "$who_is_last_branch" != "$suggested_name" ]; then
-	suggested_name="$suggested_name/base"
-    fi
-
     if [ -n "$show_inheritance_in_branches" ]; then
+	# if there are more branches to be created, we need to add a /base
+	# onto this branch, or the subsequent ones will have problems.
+	if [ "$who_is_last_branch" != "$suggested_name" ]; then
+	    suggested_name="$suggested_name/base"
+	fi
+
 	# if we have already passed one branch (last_branch is non zero)
 	# then we should log that branch name in current
 	if [ -n "$last_passed_branch" ]; then
@@ -429,11 +429,13 @@ sanitize_repo_for_branch()
     fi
 
     if [ -n "$parent_rename" ]; then
-        git branch -M $parent_rename $parent_rename/base
-        # we also need to rename the patches directories
-        mkdir -p $meta_dir/patches/$parent_rename/base
-        mv $meta_dir/patches/$parent_rename/status $meta_dir/patches/$parent_rename/base 2> /dev/null
-        mv $meta_dir/patches/$parent_rename/series $meta_dir/patches/$parent_rename/base 2> /dev/null   
+        if [ $? -ne 0 ]; then
+            git branch -M $parent_rename $parent_rename/base
+            # we also need to rename the patches directories
+            mkdir -p $meta_dir/patches/$parent_rename/base
+            mv $meta_dir/patches/$parent_rename/status $meta_dir/patches/$parent_rename/base 2> /dev/null
+            mv $meta_dir/patches/$parent_rename/series $meta_dir/patches/$parent_rename/base 2> /dev/null   
+        fi
     fi
 
     echo $suggested_name
