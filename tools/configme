@@ -269,13 +269,15 @@ if [ $? -eq 0 ]; then
 	out_dir=$target-$parent
     fi
     full_tgt=$target-$parent
-    META_DIR=meta
 else
     if [ -z $out_dir ]; then
 	out_dir=$target
     fi
     parent=`echo $target | rev | cut -d'-' -f1 | rev`
     full_tgt=$target
+fi
+
+if [ ! -d "meta" ]; then
     META_DIR=wrs
 fi
 
