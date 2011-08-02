@@ -1234,16 +1234,19 @@ if [ -n "$_patch_apply" ]; then
 	exit 1
     fi
 
-    git checkout -q $orig_branch
-    r=$?
-    if [ $r -ne 0 ]; then
-	git checkout -q $orig_branch/base
-	r=$?
-	if [ $r -ne 0 ]; then
-	    echo [ERROR] git checkout of \"$orig_branch\" failed
-	    exit $r
-	fi
-    fi
+    # no longer required. This should be ensured by the caller, 
+    # not the script. But kept around as a temporary reference, since
+    # it may be come optional functionality going forward.
+    # git checkout -q $orig_branch
+    # r=$?
+    # if [ $r -ne 0 ]; then
+    # 	git checkout -q $orig_branch/base
+    # 	r=$?
+    # 	if [ $r -ne 0 ]; then
+    # 	    echo [ERROR] git checkout of \"$orig_branch\" failed
+    # 	    exit $r
+    # 	fi
+    # fi
 fi
 
 #
