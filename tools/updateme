@@ -71,6 +71,13 @@ while [ $# -gt 0 ]; do
 		cmd_line_features="$2"
 		shift
 		;;
+            -D*|--D*)
+                if [ "$1" == "-D" ] || [ "$1" == "--D" ]; then
+                    x=$2; shift;
+		else
+                    x=`echo $1 | sed s%^-*D%%`
+                fi
+		defines="$defines $x" ;;
 	    --no-strict)
 		nostrict=t
 		;;
@@ -105,6 +112,19 @@ if [ -z "$cmd_line_branch" ]; then
     CURRENT=`git branch |grep \*|sed 's/^\* //'`
 else
     CURRENT=$cmd_line_branch
+fi
+
+##
+## create variables for use in scripts
+##
+if [ -n "$defines" ]; then
+    vars=$(echo $defines | sed 's/,/ /g')
+    for v in "$vars"; do
+        # eval makes it available for this script
+        eval $v
+	# echo makes it available for other scripts
+	dump_vars=$(echo "$dump_vars"; echo export $v)
+    done
 fi
 
 gen_dirs() {
@@ -206,7 +226,7 @@ do_compile_prep() {
 	search_dirs="$top_dir $search_dirs"
 }
 
-search_includes()
+search_includes_for_branch()
 {
 	target=$1
 	parent=$2
@@ -234,6 +254,40 @@ search_includes()
 	echo "$found_scc"
 }
 
+search_includes_for_defines()
+{
+	defines=$1	
+	found_scc=
+
+	if [ -n "$defines" ]; then
+		define_tgt1=`echo $defines | cut -d: -f1`
+		define_tgt2=`echo $defines | cut -d: -f2`
+		define_tgt3=`echo $defines | cut -d: -f3`
+	fi
+
+	sccs_that_define=`find $search_dirs -name '*.scc' \
+                                | xargs grep -l -e 'define.*' | sort | uniq`
+	for scc in $sccs_that_define; do
+		score=0
+		max_score=0
+		for tgt in $define_tgt1 $define_tgt2 $define_tgt3; do
+			if [ -n "$tgt" ]; then
+				max_score=`expr $max_score + 1`
+				f=`grep -l -e 'define.* '$tgt'$' $scc`
+				if [ -n "$f" ]; then
+			    	    score=`expr $score + 1`
+				fi
+			fi
+		done
+
+		if [ $score -eq $max_score ]; then
+			found_scc="$found_scc $scc"
+		fi
+	done
+
+	echo "$found_scc"
+}
+
 do_update() {
 	branch=$1
 	top_dir=$2
@@ -255,7 +309,7 @@ do_update() {
 	    parent=`echo $ktgt | rev | cut -d'-' -f1 | rev`
 	fi
 
-	top_tgt=`search_includes $short_branchname $parent`
+	top_tgt=`search_includes_for_branch $short_branchname $parent`
 	# refine the search to the $machine if we have more than one hit
 	for tgt in $top_tgt; do
 	    case `basename $tgt` in
@@ -266,6 +320,12 @@ do_update() {
 	top_tgt=$best_match
 	if [ -z $top_tgt ]; then
 	    top_tgt=$other_match
+	fi
+
+	# the target could not be found based on the branch, try a secondary
+	# search based on defines
+	if [ -z "$top_tgt" ]; then
+	    top_tgt=`search_includes_for_defines "$KDESC"`
 	fi
 
         # if there isn't a target .. we'll need to create one
