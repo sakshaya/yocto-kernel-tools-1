@@ -2,7 +2,7 @@
 
 #  (kgit-meta), (processes a meta-series to construct a git tree)
 
-#  Copyright (c) 2008-2010 Wind River Systems, Inc.
+#  Copyright (c) 2008-2011 Wind River Systems, Inc.
 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
@@ -40,7 +40,7 @@ cat <<EOF
 
    <meta-series>: required if --apply or --kconf or --patch is used
 
-     --init: initialize the repository for application of the meta 
+     --init: initialize the repository for application of the meta
              series
      --kconf: run the kernel configuration portion of the meta series         
      --apply: apply patches found in the meta series. This also runs
@@ -317,7 +317,7 @@ do_kconf()
 
     local kconf_files="hardware.kcf non-hardware.kcf hardware.cfg non-hardware.cfg"
 
-    _reloc_cfg_file_dir=`make_relocatable $_cfg_file_dir`
+    _reloc_cfg_file_dir=`_strip_common_prefix $_cfg_file_dir`
     if [ -d "$_cfg_file_dir" ]; then
 	mkdir -p $work_cfg_dir/$_reloc_cfg_file_dir
 
@@ -351,7 +351,7 @@ do_cfg()
     local _cfg_file_dir=$1
 
     if [ -d "$_cfg_file_dir" ]; then
-	reloc_dir=`make_relocatable $_cfg_file_dir`
+	reloc_dir=`_strip_common_prefix $_cfg_file_dir`
 	if [ ! -d "$work_cfg_dir/$reloc_dir" ]; then
 	    mkdir -p $work_cfg_dir/$reloc_dir
 	fi
@@ -441,6 +441,42 @@ sanitize_repo_for_branch()
     echo $suggested_name
 }
 
+# preps for a new branch
+#   arg1: the branch name
+# uses:
+#   global: meta_dir
+# sets:
+#   global: series_file, patches_dir
+branch_prep()
+{
+    branch_name=$1
+
+    # even if we aren't creating the branch from scratch, it is possible
+    # that it has never been patched before. So let's make sure the 
+    # infrastructure for patching is in place
+    if [ ! -d $meta_dir/patches/$branch_name ]; then
+	mkdir -p $meta_dir/patches/$branch_name
+    fi
+    if [ ! -e $meta_dir/patches/$branch_name/series ]; then	
+ 	touch $meta_dir/patches/$branch_name/series
+    fi
+    if [ ! -e $meta_dir/patches/$branch_name/status ]; then
+	touch $meta_dir/patches/$branch_name/status
+    fi
+    
+    series_file=$meta_dir/patches/$branch_name/series
+    if [ -s $meta_dir/patches/$branch_name/series ]; then
+	cat $meta_dir/patches/$branch_name/series | tr -s / > $meta_dir/patches/$branch_name/series.new
+	mv $meta_dir/patches/$branch_name/series.new $meta_dir/patches/$branch_name/series
+    fi
+    status_file=$meta_dir/patches/$branch_name/status
+    if [ -s $meta_dir/patches/$branch_name/status ]; then
+	cat $meta_dir/patches/$branch_name/status | tr -s / > $meta_dir/patches/$branch_name/status.new
+	mv $meta_dir/patches/$branch_name/status.new $meta_dir/patches/$branch_name/status
+    fi
+
+    patches_dir=$meta_dir/patches/$branch_name
+}
 
 # If branch name inheritance is on, branches will be built up using
 # the notation: <branch><divider><branch>, where <divider> is typically
@@ -488,18 +524,7 @@ do_branch()
 	name=`sanitize_repo_for_branch $name`
     fi
 
-    # even if we aren't creating the branch from scratch, it is possible
-    # that it has never been patched before. So let's make sure the 
-    # infrastructure for patching is in place
-    if [ ! -d $meta_dir/patches/$name ]; then
-	mkdir -p $meta_dir/patches/$name
-    fi
-    if [ ! -e $meta_dir/patches/$name/series ]; then	
- 	touch $meta_dir/patches/$name/series
-    fi
-    if [ ! -e $meta_dir/patches/$name/status ]; then
-	touch $meta_dir/patches/$name/status
-    fi
+    branch_prep $name
 
     if [ -n "$create" ]; then
 	if [ "$vlevel" -eq 2 ]; then
@@ -519,38 +544,16 @@ do_branch()
 	else
 	    git checkout -q -b $name $pcommit 2> /dev/null
 	fi
-
-	if [ $? -eq 0 ]; then
-	    active_patching=t
-
-	    series_file=$meta_dir/patches/$name/series
-	    if [ -s $meta_dir/patches/$name/series ]; then
-		cat $meta_dir/patches/$name/series | tr -s / > $meta_dir/patches/$name/series.new
-		mv $meta_dir/patches/$name/series.new $meta_dir/patches/$name/series
-	    fi
-	    status_file=$meta_dir/patches/$name/status
-	    if [ -s $meta_dir/patches/$name/status ]; then
-		cat $meta_dir/patches/$name/status | tr -s / > $meta_dir/patches/$name/status.new
-		mv $meta_dir/patches/$name/status.new $meta_dir/patches/$name/status
-	    fi
-
-	    patches_dir=$meta_dir/patches/$name
+	if [ $? -ne 0 ]; then
+	    echo "ERROR: could not checkout branch $name"
+	    exit 1
 	fi
     else	
 	git checkout -q $name
-
-	series_file=$meta_dir/patches/$name/series
-	if [ -s $meta_dir/patches/$name/series ]; then
-            cat $meta_dir/patches/$name/series | tr -s / > $meta_dir/patches/$name/series.new
-            mv $meta_dir/patches/$name/series.new $meta_dir/patches/$name/series
+	if [ $? -ne 0 ]; then
+	    echo "ERROR: could not checkout branch $name"
+	    exit 1
 	fi
-	status_file=$meta_dir/patches/$name/status
-	if [ -s $meta_dir/patches/$name/status ]; then
-            cat $meta_dir/patches/$name/status | tr -s / > $meta_dir/patches/$name/status.new
-            mv $meta_dir/patches/$name/status.new $meta_dir/patches/$name/status
-	fi
-	
-	patches_dir=$meta_dir/patches/$name
 
 	if [ "$vlevel" -eq 2 ]; then
 	    echo "      branch ===> $name (reuse)"
@@ -570,11 +573,14 @@ do_branch()
     last_branch=$name
 }
 
-make_relocatable()
+# removes any common prefixes from a name (path, patch, etc). With
+# these removed, the resulting name is now relative to a set of
+# search paths, and can be found later.
+_strip_common_prefix()
 {
     in_name=$1
 
-    # this takes an input name and searches all known relocations.
+    # this takes an input name and searches all known paths.
     # the relocation that removes the MOST from the original is
     # the one we want, since it is the best match by definition
     out_len=${#in_name}
@@ -592,12 +598,14 @@ make_relocatable()
     echo "$relocated_name"
 }
 
+
+# conditionally push 
 do_patch()
 {
     local name=$1
     local push_patch=
 
-    local_name=`make_relocatable $name | tr -s /`
+    local_name=`_strip_common_prefix $name | tr -s /`
 
     add_to_series=
     if [ -n "$active_patching" ]; then
@@ -918,189 +926,29 @@ _kconf()
 
 wrap_meta_series()
 {
-    series=$1
+    _series=$1
+    _valid_meta_cmds=$2
+
+    # reset the progress increment
     pdone=1
-    ptotal=`grep patch $series | wc -l`
-    start=`date +"%s"`
+    ptotal=`grep patch $_series | wc -l`
+    _start=`date +"%s"`
 
-    # uncomment the commands that we are willing to run
-    cat $series | sed -e 's/^# *\(_cfg\)/\1/g' \
-                      -e 's/^# *\(_mark\)/\1/g' \
-                      -e 's/^# *\(_git\)/\1/g' \
-                      -e 's/^# *\(_branch_begin\)/\1/g' \
-                      -e 's/^# *\(_reloc_dir\)/\1/g' \
-                      -e 's/^# *\(_kconf\)/\1/g' \
-                      -e 's/^# *\(_force_branch\)/\1/g' \
-                      -e 's/^# *\(_patch\)/\1/g' > $series.wrap
-
-    # now run the series
-    source $series.wrap
-
-    # grab any left over patches
-    do_pending_patches
-    if [ $? -ne 0 ]; then
-	exit 1
+    # if no limitation was passed, allow all commands to be run
+    if [ -z "$_valid_meta_cmds" ]; then
+	_valid_commands="_cfg _mark _git _branch_begin _reloc_dir _kconf _force_branch _patch"
     fi
-
-    stop=`date +"%s"`
-    duration=`expr $stop - $start`
-
-    if [ -n "$verbose" ]; then
-	if [ $vlevel -eq 2 ]; then
-	    echo ""
-	    echo "<=== processed $_meta_series in $duration seconds"
-	else
-	    progress_done "in $duration seconds"
-	fi
-    fi
-}
-
-do_meta_series()
-{
-    local _local_meta_series=$1
-    local _action=$1
-    local git_args=""
-    local _processing_patches=
-
-    if [ ! "`get_current_git_branch`" == "$content_branch" ]; then
-	git checkout -q content_branch
-    fi
-
-    if [ $vlevel -eq 2 ]; then
-	echo ""
-	echo "===> processing $_meta_series"
-    fi
-
-    # FUTURE:
-    #   - could analyize the branches. 
-    #      - if you don't have any local branches
-    #      - look for your global ones to exist
-    #      - if they do, check them out. create those that 
-    #        don't
-
-    pdone=1
-    ptotal=`grep patch $_local_meta_series | wc -l`
-    start=`date +"%s"`
-    cat $_local_meta_series | while read entry; do
-	if [ -z "$entry" ] || [ -n "$skip_to_end" ]; then
-	    continue
-	fi
-
-	cmd=`echo $entry | 
-              awk '/^# *_cfg/ { print "cfg" }
-                   /^# *_mark/ { print "mark" }
-                   /^# *_git/  { print "git" }
-                   /^# *_branch_begin/ { print "branch_begin" }
-                   /^# *_force_branch/ { print "branch_begin" }
-                   /^# *_kconf/ { print "kconf" }
-                   /^# *_branches_local/ { print "" }
-                   /^# *_reloc_dir/ { print "reloc" }
-		   /^# *_patch/ { print "patch" }
-                   /^#.*/ { print "comment" }
-                   /.*/ { nothing }' | head -1`
-
-	# were a set of valid command passed ?
-	if [ -n "$_valid_meta_cmds" ]; then
-	    echo "$_valid_meta_cmds" | grep -q -E "^$cmd"
-	    if [ $? -ne 0 ]; then
-		continue
-	    fi
-	fi
-
-	if [ -z "$cmd" ]; then
-	    continue
-	fi
-
-	# if we WERE processing patch commands and this command
-	# is not another one, we have to push all the patches 
-	# before continuing so anything like a tag will be in the
-	# correct place.
-	if [ -n "$_processing_patches" ] && [ "$cmd" != "patch" ]; then
-	    do_pending_patches
-	    if [ $? -ne 0 ]; then
-		exit 1
-	    fi
-	fi
-
-	if [ -n "$fast_forward_to_next_branch" ]; then
-	    if [ "$cmd" = "branch_begin" ]; then
-		true
-	    else
-		continue
-	    fi
-	fi
-	case $cmd in
-	    comment)
-		true
-		;;
-	    reloc)
-                dir=`echo $entry | cut -d' ' -f3`
-		rdirs="$rdirs $dir/"
-		;;
-	    mark)
-		n=`echo $entry | cut -d' ' -f3`
-		a=`echo $entry | cut -d' ' -f4`
-		if [ "$a" = "start" ]; then
-		    if [ "$vlevel" -eq 2 ]; then
-			echo "   mark --> $n"
-		    fi
-		else
-                    if [ "$vlevel" -eq 2 ]; then
-			echo "   mark <-- $n"
-		    fi
-		fi
-                ;;
-	    git)
-		git_args=`echo $entry | cut -d' ' -f3-`
-		do_git $git_args
-                ;;
-	    branch_begin) 
-		         n=`echo $entry | cut -d' ' -f3`
-			 f=`echo $entry | cut -d' ' -f4`
-			 # do branch will let us know if the branch
-			 # already existed. 
-			 do_branch $n $f
-			 if [ -z "$active_patching" ]; then
-			     fast_forward_to_next_branch=t
-			 else
-			     fast_forward_to_next_branch=
-			 fi
-                ;;
-	    cfg)
-		d=`echo $entry | cut -d' ' -f3`
-		do_cfg "$d"
-                ;;
-	    kconf)
-		d=`echo $entry | cut -d' ' -f4`
-		do_kconf "$d"
-                ;;
-            patch)  # patching  is the default cmd
-		entry=`echo $entry | sed 's%^# *_patch%%'`
-		if [ -n "$_stop_at" ]; then
-		    echo $entry | grep -q -E "^$_stop_at"
-		    if [ $? -eq 0 ]; then
-			skip_to_end=t
-		    fi
-		fi
-		if [ -z "$skip_to_end" ]; then
-		    _processing_patches=t
-		    do_patch $entry
-		    if [ $? -ne 0 ]; then
-			exit 1
-		    fi
-		fi
-		;;
-                *)
-		true 
-                ;;
-	esac
+    # generate a sed script
+    rm -f sed_script.cmds
+    for _cmd in $_valid_commands; do
+	echo "s/^# *\($_cmd\)/\1/g" >> sed_script.cmds
     done
 
-    # catch an error codes thrown from the subshell that was
-    # applying the patches.
-    if [ $? -ne 0 ]; then
-	exit 1
-    fi
+    # uncomment the commands that we are willing to run
+    cat $_series | sed -f sed_script.cmds > $_series.wrap
+
+    # now run the series
+    source $_series.wrap
 
     # grab any left over patches
     do_pending_patches
@@ -1108,27 +956,13 @@ do_meta_series()
 	exit 1
     fi
 
-    # tag the last branch's top
-    b=`get_current_git_branch`
-#     t=`git show-ref $b-mark`
-#     if [ -z "$t" ]; then
-# 	do_tag "$b-mark" \
-# "Wind River branch reference tag, if \"$b\"
-#  diverges from this tag, you may need to rebase. 
- 
-#   - git checkout <blah>
-#   - guilt-rebase $b
-
-# "
-#     fi
-
-    stop=`date +"%s"`
-    let duration=$stop-$start
+    _stop=`date +"%s"`
+    _duration=`expr $_stop - $_start`
 
     if [ -n "$verbose" ]; then
 	if [ $vlevel -eq 2 ]; then
 	    echo ""
-	    echo "<=== processed $_meta_series in $duration seconds"
+	    echo "<=== processed $_meta_series in $_duration seconds"
 	else
 	    progress_done "in $duration seconds"
 	fi
@@ -1170,14 +1004,13 @@ hook_dir=$meta_dir/scripts
 # work dir is wherever we are running
 work_dir=$mypath
 
-
 #
 # init: creates and configures the git repository. should be
 #       safe to run more than once, but only if necessary
 #
 if [ -n "$_init" ]; then
     if [ -n "$verbose" ]; then
-	echo "[INFO] initializing WR Linux repository . . ."
+        echo "[INFO] initializing kernel repository . . ."
     fi
 
     mkdir -p $work_dir
@@ -1273,8 +1106,7 @@ if [ -n "$_kconf" ]; then
 	# if --update AND --kconf were passed, let's run the
 	# meta series but only do the config fragment migration
 	if [ -n "$_update" ]; then
-	    _valid_meta_cmds="kconf"
-	    do_meta_series $_meta_series
+	    wrap_meta_series $_meta_series "_kconf"
 	    exit 0
 	fi
     
@@ -1317,13 +1149,13 @@ IFS='
 	    rm -f $meta_dir/cfg/$branchname/$fraglist
 	    frgs=`cat $_meta_series|grep '^# _kconf' |awk '{print $4}'`
 	    for f in $frgs; do
-		reloc_frag=`make_relocatable $f`
+		reloc_frag=`_strip_common_prefix $f`
 		echo "$reloc_frag" >> $meta_dir/cfg/$branchname/$fraglist
 	    done
 	else
 	    frgs=`cat $_meta_series|grep '^# _kconf' |awk '{print $4}'`
 	    for f in $frgs; do
-		reloc_frag=`make_relocatable $f`
+		reloc_frag=`_strip_common_prefix $f`
 		echo "$reloc_frag" >> $meta_dir/cfg/$branchname/$fraglist
 	    done
 	fi
@@ -1331,9 +1163,9 @@ IFS='
 		fragtype=`echo $entry | awk '{print $3}'`
 		fragname=`echo $entry | awk '{print $4}'`
 		if [ x$fragtype = xhardware ]; then
-			echo `make_relocatable $fragname` >> $meta_dir/cfg/$branchname/hdw_frags.txt
+			echo `_strip_common_prefix $fragname` >> $meta_dir/cfg/$branchname/hdw_frags.txt
 		elif [ x$fragtype = xnon-hardware ]; then
-			echo `make_relocatable $fragname` >> $meta_dir/cfg/$branchname/non_hdw_frags.txt
+			echo `_strip_common_prefix $fragname` >> $meta_dir/cfg/$branchname/non_hdw_frags.txt
 		else
 			echo "[ERROR] type \"$fragtype\" of file \"$fragname\" is not hardware or non-hardware"
 			exit 1
