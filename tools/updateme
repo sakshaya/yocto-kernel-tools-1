@@ -143,7 +143,17 @@ find_features() {
 
 	for d in $dirs; do
 	    potential=`find $d -maxdepth 1 -type f -name *.scc`
-	    extra_features="$extra_features $potential"
+	    # we should *not* auto-add a .scc file that defines
+	    # KMACHINE, etc. These are leaf nodes that should be 
+	    # explicitly requested.
+	    for p in $potential; do
+		grep -q KMACHINE $p
+		if [ $? -ne 0 ]; then
+		    extra_features="$extra_features $p"
+		else
+		    cp $p $meta_dir/cfg/scratch/obj
+		fi
+	    done
 	done
 }
 
@@ -152,7 +162,7 @@ find_features() {
 find_configs() {
 	dirs=$@
 	
-	# defconfigs should be found first, so fragements can tweak
+	# defconfigs should be found first, so fragments can tweak
 	# settings
 	for d in $dirs; do
 	    potential=`find $d -maxdepth 1 -type f -name defconfig`
