@@ -2,7 +2,7 @@
 
 #  (kgit-scc), (process a series of .scc files into a full repository)
 
-#  Copyright (c) 2008-2009 Wind River Systems, Inc.
+#  Copyright (c) 2008-2011 Wind River Systems, Inc.
 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
@@ -40,8 +40,7 @@ usage()
 {
 cat <<EOF
 
- kgit-scc [-e <dir>] [--leaf <tgt>]
-          [--prep <feat1 feat2 feat3>]
+ kgit-scc [-e <dir>] [--prep <feat1 feat2 feat3>]
           [-v] [-h] [-j <count>] [-I<dirs to search>] <input> <output>
 
   A front end to the 'series code compiler (scc)'. It facilitiates
@@ -52,11 +51,6 @@ cat <<EOF
                  starting the build
    -e <dir>   :  run executables and put the output in this
                  subdirectory directory of <output>
-   --leaf     :  search for a leaf node. 
-                   <tgt>   is the parent branch. 'any' is the wildcard
-                   <input> is the search pattern. Note: the search parttern
-                  should be in GNU find's emacs regex format and will be
-                  directly passed to find
    --src      :  find all of the source files (.scc) matching the pattern
                  <input> in the passed include directories
    --prep:    : features that should be used to prep a repository build
@@ -108,7 +102,7 @@ search_includes()
 		    continue
 		fi
 		if [ "$parent_leaf" != "any" ]; then
-		    x=`grep "scc_leaf" $f`
+		    x=`grep -e ".*scc_leaf.*" -e ".*define.*KTYPE" $f`
 		    if [ -n "$x" ]; then
 			echo "$x" | grep -q -w $parent_leaf
 			if [ $? -eq 0 ]; then
@@ -150,7 +144,7 @@ get_feat_list()
     flist=$(echo "$flist" | sort)
     for f in $flist; do
 	if [ -n $check_leaf ]; then
-	    grep -q "scc_leaf" $f
+	    grep -q -e ".*scc_leaf.*" -e ".*define.*KTYPE" $f
 	    if [ $? -eq 0 ]; then
 		if [ -n "$leaf_flist" ]; then
 		    leaf_flist=`echo "$leaf_flist"; echo "$f"`
@@ -181,10 +175,6 @@ while [ $# -gt 0 ]; do
 		;;
 	-e|--e)
 		exec_dir=$2
-		shift
-		;;
-	-l|--leaf)
-		leaf=$2
 		shift
 		;;
 	--init)
@@ -293,16 +283,6 @@ fi
 top_meta_dir=meta
 meta_dir=meta/cfg/meta
 exec_dir=$meta_dir/obj
-
-if [ -n "$leaf" ]; then
-    parent=$leaf
-    search_tgt=$output
-
-    search_includes $search_tgt $parent
-
-    # flee, we are done
-    exit 0
-fi
 
 if [ -n "$src" ]; then
     pattern=$output
@@ -468,7 +448,7 @@ if [ -z "$use_per_build_obj_dir" ]; then
 		for f in $prep_feature_desc $feat_list; do
 		    if [ -n "$use_per_build_obj_dir" ]; then
 			small_feat=`basename $f .scc`
-			grep -q "scc_leaf" $f
+			grep -q -e ".*scc_leaf.*" -e ".*define.*KTYPE" $f
 			if [ $? -ne 0 ]; then
 			    continue
 			fi
