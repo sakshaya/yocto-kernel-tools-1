@@ -94,8 +94,8 @@ fi
 
 if [ -n "$consistency_check" ]; then
 
-    # check if this is a wind river repo, that's all we can 
-    # check. A non wind river repo should just do nothing
+    # check if this is a meta repo, that's all we can 
+    # check. A non meta repo should just do nothing
     check_refs=`git tag | grep checkpoint- | head -n1`
     if [ -z "$check_refs" ]; then
 	return
