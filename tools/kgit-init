@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#  (kgit-init), (initialize a Wind River kernel git tree)
+#  (kgit-init), (initialize a meta-based kernel git tree)
 
-#  Copyright (c) 2008-2010 Wind River Systems, Inc.
+#  Copyright (c) 2008-2011 Wind River Systems, Inc.
 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
@@ -344,7 +344,7 @@ if [ -n "$new_repo" ] || [ -n "$existing_but_flat_repo" ]; then
 	echo "/LDAT_LINUX_PATCHES" >> .gitignore
 	echo "/$meta_dir" >> .gitignore
 	git add .gitignore 
-        git commit -m "gitignore: adding Wind River exclusions"
+        git commit -m "gitignore: adding base exclusions"
     else
 	touch .gitignore
     fi
@@ -358,7 +358,7 @@ if [ -n "$new_repo" ] || [ -n "$existing_but_flat_repo" ]; then
     # create a meta-information branch
     git branch $meta_branch $initial_branch_point
 
-    # tag the Wind River base
+    # tag the base
     git tag "meta_`date +%F`"
 fi
 
