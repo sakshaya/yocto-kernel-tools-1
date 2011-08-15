@@ -1377,57 +1377,6 @@ _dump_extended_info()
     _dump "";
 }
 
-# arg1: target file
-# arg2: files that are not eligible to match
-search_include_paths2()
-{
-    local tgt=$1
-    local exclude_files=$@
-    
-    if [ -z "$exclude_files" ]; then
-	exclude_files="/dev/null"
-    fi
-
-    tgt=$(_strip_ext "$tgt" ".$feature_ext")
-    base=`basename $tgt`
-
-    for p in "." "$current_feature_dir" $include_paths; do
-	# target file + default feature extension
-	if [ -f $p/$tgt.$feature_ext ]; then
-	    possible=`readlink -f "$p/$tgt.$feature_ext"`
-	# raw target file
-	elif [ -f $p/$tgt ]; then
-	    possible=`readlink -f "$p/$tgt"`
-        # special processing test the include directory +
-	# the name of the feature. This saves us doing a massive
-	# set of includes for sub categories includes
-	elif [ -f $p/$tgt/$tgt.$feature_ext ]; then
-	    possible=`readlink -f "$p/$tgt/$tgt.$feature_ext"`
-	elif [ -f $p/$tgt/$tgt ]; then
-	    possible=`readlink -f "$p/$tgt/$tgt"`
-        # more special processing. test if the included
-	# feature is actually just the name of a directory
-	# AND there is not file with the same name present.
-	# if that is true, then test for:
-        #     <tgt>/<tgt>.extension
-	# in that directory
-	elif [ -f $p/$tgt/$base.$feature_ext ]; then
-	    possible=`readlink -f "$p/$tgt/$base.$feature_ext"`
-	elif [ -f $p/$tgt/$base ]; then
-	    possible=`readlink -f "$p/$tgt/$base.$feature_ext"`
-	fi
-
-	if [ -n "$possible" ]; then
-	    echo "$exclude_files" | grep -q "$possible"
-	    if [ $? -ne 0 ]; then
-		echo $possible
-		return
-	    fi
-	    possible=
-	fi
-    done
-}
-
 search_include_paths()
 {
     local tgt=$1
