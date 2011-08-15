@@ -2,7 +2,7 @@
 
 # "updateme" script.
 
-#  Copyright (c) 2010 Wind River Systems, Inc.
+#  Copyright (c) 2010-2011 Wind River Systems, Inc.
 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
@@ -19,7 +19,7 @@ usage()
 {
 cat << EOF
 
- updateme [--no-strict] [--branch ${kbranch}] [--feature <feature name>] \
+ updateme [--no-strict] [-D<var>=<value>] [--branch ${kbranch}] [--feature <feature name>] \
            ${ARCH} ${MACHINE} [features or directories]
 
       --no-strict: do not error if a passed feature cannot be found
@@ -27,6 +27,7 @@ cat << EOF
                    passed, the current branch will be used
       --feature:   apply a feature named $feature to the machine description.
                    The feature must be found in ${WORKDIR}
+      -D:          define <var> to <value> which will be available to sub scripts 
        ${ARCH}:    The kernel architecture of the machine. This is used to locate
                    default options/configuration.
        ${MACHINE}: The name of the machine. This is used to locate the machine
