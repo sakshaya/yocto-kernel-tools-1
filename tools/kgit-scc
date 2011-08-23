@@ -411,7 +411,7 @@ if [ -n "$init" ]; then
 		exit 1
 	    fi
 
-	    kgit-init -v -m "WR Linux baseline" \
+	    kgit-init -v -m "base: create tree baseline" \
                                       $input $base_ver $output
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. Unable to clone source repository $input"
