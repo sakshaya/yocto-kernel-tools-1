@@ -946,6 +946,7 @@ wrap_meta_series()
 
     # uncomment the commands that we are willing to run
     cat $_series | sed -f sed_script.cmds > $_series.wrap
+    rm -f sed_script.cmds
 
     # now run the series
     source $_series.wrap
@@ -1111,7 +1112,7 @@ if [ -n "$_kconf" ]; then
 	fi
     
 	if [ -n "$verbose" ]; then
-		echo "[INFO] collecting configs in $_meta_series "
+	    echo "[INFO] collecting configs in $_meta_series "
 	fi
 
 	branchpoints=`cat $_meta_series|grep '_branch_begin\|_force_branch'|awk '{print $3"|"$4}'`
