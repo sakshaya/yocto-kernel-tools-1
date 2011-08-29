@@ -418,6 +418,13 @@ if [ -n "$init" ]; then
 		exit 1
 	    fi
 	    (cd $output; git config --global guilt.autotag 0)
+	    # tidy up any files init left uncommitted
+	    (cd $output;
+		for f in `git ls-files -m`; do
+		    git add $f
+		done
+		git commit -s -m "kgit: creating baseline state"
+	    )
 	fi
 	let phase_count=$phase_count+1
     fi
