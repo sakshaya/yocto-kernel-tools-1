@@ -429,13 +429,11 @@ sanitize_repo_for_branch()
     fi
 
     if [ -n "$parent_rename" ]; then
-        if [ $? -ne 0 ]; then
-            git branch -M $parent_rename $parent_rename/base
-            # we also need to rename the patches directories
-            mkdir -p $meta_dir/patches/$parent_rename/base
-            mv $meta_dir/patches/$parent_rename/status $meta_dir/patches/$parent_rename/base 2> /dev/null
-            mv $meta_dir/patches/$parent_rename/series $meta_dir/patches/$parent_rename/base 2> /dev/null   
-        fi
+        git branch -M $parent_rename $parent_rename/base
+        # we also need to rename the patches directories
+        mkdir -p $meta_dir/patches/$parent_rename/base
+        mv $meta_dir/patches/$parent_rename/status $meta_dir/patches/$parent_rename/base 2> /dev/null
+        mv $meta_dir/patches/$parent_rename/series $meta_dir/patches/$parent_rename/base 2> /dev/null   
     fi
 
     echo $suggested_name
@@ -493,7 +491,7 @@ do_branch()
     local force=$2
     local create=
 
-    name=`generate_branch_name $1 $last_branch`    
+    name=`generate_branch_name $1 $last_branch`
 
     if [ -n "$force" ]; then
 	# if the branches have diverged (i.e. another force)
@@ -522,6 +520,13 @@ do_branch()
 
     if [ -n "$create" ]; then
 	name=`sanitize_repo_for_branch $name`
+	
+        # it is possible that the sanitization phase renamed a branch, which
+	# means we no longer have to create something. 
+	git show-ref --quiet --verify -- "refs/heads/$name"
+	if [ $? -eq 0 ]; then
+	    create=
+	fi
     fi
 
     branch_prep $name
@@ -548,6 +553,8 @@ do_branch()
 	    echo "ERROR: could not checkout branch $name"
 	    exit 1
 	fi
+
+	active_patching=t
     else	
 	git checkout -q $name
 	if [ $? -ne 0 ]; then
