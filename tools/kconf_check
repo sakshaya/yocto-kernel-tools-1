@@ -241,12 +241,17 @@ fi
 # Since we've already filtered dups from the toplevel, take the requested
 # value from that, and the set value from the final .config file.
 ##########################################################################
-
+INPUT_CONFIG=$KERNEL_CONFIG
 rm -f $KCONF_DIR/mismatch.cfg
 if [ ! -e $KCONF_DIR/$KERNEL_CONFIG ]; then
-    KERNEL_CONFIG=`find  $KCONF_DIR -name "*$KERNEL_CONFIG" | head -n1`
+    KERNEL_CONFIG=`find $KCONF_DIR -name "*$INPUT_CONFIG" | head -n1`
     if [ -n "$KERNEL_CONFIG" ]; then
 	KERNEL_CONFIG=`basename $KERNEL_CONFIG`
+    else
+	KERNEL_CONFIG=`find  $KCONF_DIR -name "*$INPUT_CONFIG*" | head -n1`
+	if [ -n "$KERNEL_CONFIG" ]; then
+	    KERNEL_CONFIG=`basename $KERNEL_CONFIG`
+	fi
     fi
 fi
 
