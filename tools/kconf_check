@@ -48,6 +48,15 @@ CONF_HDW=$KCONF_DIR/always_hardware.cfg
 # Overrride for non-hardware CONFIG items that are in a hardware Kconfig.
 CONF_NONHDW=$KCONF_DIR/always_nonhardware.cfg
 
+# Log any redefinitions/overrides that take place
+KCONF_OVERRIDE=$KCONF_DIR/redefinition.txt
+# Egads. People are listing the same thing multiple times within a fragment.
+#  An evil sin that deserves its own category (and insults).
+KCONF_FRAG_ERRS=$KCONF_DIR/fragment_errors.txt
+# Log items that were defined as 'generic' (aka software) and were changed
+# to hardware specific. This is a borderline error.
+KCONF_REDFINED_AS_BOARD_SPECIFIC=$KCONF_DIR/redefined_as_board_specific.txt
+
 #echo KERNEL_CONFIG: $KERNEL_CONFIG
 #echo TOP_BUILD_DIR: $TOP_BUILD_DIR
 #echo LINUX_SRC: $LINUX_SRC
@@ -271,6 +280,31 @@ for i in `cat $KCONF_DIR/specified_hdw.cfg` ; do
 	fi
 		
 done
+
+
+if [ -s $KCONF_FRAG_ERRS ]; then
+	OPT_COUNT=`cat $KCONF_FRAG_ERRS |grep Warning: | wc -l | awk '{print $1}'`
+	echo There were $OPT_COUNT instances of config fragment errors.
+	echo The full list can be found in your workspace at:
+	echo $KCONF_FRAG_ERRS | sed 's=^'$TOP_BUILD_DIR'/=   ='
+	echo
+fi
+if [ -s $KCONF_OVERRIDE ]; then
+	OPT_COUNT=`cat $KCONF_OVERRIDE |grep Value | wc -l | awk '{print $1}'`
+	echo There were $OPT_COUNT kernel config options redefined during processing this BSP.
+	echo These config options are defined in more than one config fragment.
+	echo The full list can be found in your workspace at:
+	echo $KCONF_OVERRIDE | sed 's=^'$TOP_BUILD_DIR'/=   ='
+	echo
+fi
+if [ -s $KCONF_REDFINED_AS_BOARD_SPECIFIC ]; then
+	OPT_COUNT=`cat $KCONF_REDFINED_AS_BOARD_SPECIFIC | wc -l | awk '{print $1}'`
+	echo There were $OPT_COUNT kernel config options redefined as board specific.
+	echo This is not an error, but should be noted for future migration purposes.
+	echo The full list can be found in your workspace at:
+	echo $KCONF_REDFINED_AS_BOARD_SPECIFIC | sed 's=^'$TOP_BUILD_DIR'/=   ='
+	echo
+fi
 
 # One could argue that any mismatch is a valid reason to declare failure.
 # If that is what seems appropriate, then replace the sleep with an exit 1
