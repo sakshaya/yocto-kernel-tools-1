@@ -58,6 +58,16 @@ KCONF_OVERRIDE=$KCONF_DIR/redefinition.txt
 # Egads. People are listing the same thing multiple times within a fragment.
 #  An evil sin that deserves its own category (and insults).
 KCONF_FRAG_ERRS=$KCONF_DIR/fragment_errors.txt
+# Log items that were defined as 'generic' (aka software) and were changed
+# to hardware specific. This is a borderline error.
+KCONF_REDFINED_AS_BOARD_SPECIFIC=$KCONF_DIR/redefined_as_board_specific.txt
+
+# By setting this flag, we won't warn if two config fragments set 
+# a value and they are the same. We'll continue to warn if they
+# change them.
+if [ -z "$ALLOW_OVERLAPPING_CONFIGS" ]; then
+	ALLOW_OVERLAPPING_CONFIGS=t
+fi
 
 NEW_KERNEL_CFG=$KCONF_DIR/$KERNEL_CONFIG-new
 OLD_KERNEL_CFG=$KCONF_DIR/$KERNEL_CONFIG
@@ -84,11 +94,28 @@ function append_and_filter ()
 	  sed 's/^\(# \)\{0,1\}\(CONFIG_[a-zA-Z0-9_]*\)[= ].*/\2/'`
 	for i in $CFG_LIST ; do
 		grep -q -w $i $ORIG
-		if [ $? == 0 ] ; then	
-			echo Value of $i is redefined by fragment $SRCFILE:
-			echo Old value: `grep -w $i $ORIG`
-			echo New value: `grep -w $i $APPEND`
-			echo
+		if [ $? == 0 ] ; then
+			OLD_VALUE=`grep -w $i $ORIG`
+			NEW_VALUE=`grep -w $i $APPEND`
+			# if overlapping configs are allowed, only warn if it
+			# changed. And only then warn if it wasn't a hardware
+			# option being set.
+			if [ -n "$ALLOW_OVERLAPPING_CONFIGS" ]; then
+				if [ "$OLD_VALUE" != "$NEW_VALUE" ]; then
+					grep -q -w $i $CONF_HDW
+					if [ $? -ne 0 ]; then
+						echo Value of $i is redefined by fragment $SRCFILE:
+						echo Old value: `grep -w $i $ORIG`
+						echo New value: `grep -w $i $APPEND`
+						echo
+					fi
+				fi
+			else
+				echo Value of $i is redefined by fragment $SRCFILE:
+				echo Old value: `grep -w $i $ORIG`
+				echo New value: `grep -w $i $APPEND`
+				echo
+			fi
 			mv -f $ORIG $ORIG~
 			cat $ORIG~ | grep -v -w $i > $ORIG
 			rm -f $ORIG~
@@ -171,6 +198,7 @@ for f in `cat $KCONF_DIR/config_frag.txt`; do
 
 	# Possible fixme -- could check hdw additions against the non-hdw
 	# and vice versa -- it would allow folks to mask things.
+	# See alternate solution just at the bottom of this loop.
 	if [ -f $frag_dir/non-hardware.kcf ]; then
 		cat $frag_dir/non-hardware.kcf | grep -v '^#' | \
 			sed '/^$/d' >> $KCONF_NONHDW
@@ -202,6 +230,24 @@ if [ ! -f $CONF_HDW ]; then
     touch $CONF_HDW
 fi
 
+# Nobody ever specifies things as non-hardware.  All they ever do is lie like
+# a cheap rug and say that things that aren't hardware really are (like
+# turning on a fs in a BSP) and then cheating to mask the warning).  So
+# rather than filter all hardware from non hdw on the fly for each new
+# addition, as mentioned above - simply instead ensure anything listed in the
+# hardware list *doesnt* appear in the non-hdw list.
+#
+# But this qualifies as a redefintion as something that wasn't board specific
+# to something that IS board specific. So we should log it, and make it an
+# informational message.
+#
+mv -f $CONF_NONHDW $CONF_NONHDW~
+cat $CONF_NONHDW~ | grep -v -w -f $CONF_HDW > $CONF_NONHDW
+# the difference between what was 'non hardware' and 'hardware' means that
+# it was re-defined to be board specific. We should log this change and 
+# report it later
+cat $CONF_NONHDW~ | grep -w -f $CONF_HDW > $KCONF_REDFINED_AS_BOARD_SPECIFIC
+rm -f $CONF_NONHDW~
 
 for f in `cat $KCONF_DIR/config_frag.txt`; do
 	# The input line is the Host path into the kernel-next cache.
@@ -211,7 +257,7 @@ for f in `cat $KCONF_DIR/config_frag.txt`; do
 	# ones in the kernel-cache at this point.
 	frag=$WRS_DIR/cfg/$f
 
-#	echo "[INFO] Processing $frag"
+        # echo "[INFO] Processing $frag"
 
 	if [ -f $frag ]; then
 		rm -f $KCONF_DIR/.scratch
@@ -227,21 +273,6 @@ for f in `cat $KCONF_DIR/config_frag.txt`; do
 
 done
 
-if [ -s $KCONF_FRAG_ERRS ]; then
-	OPT_COUNT=`cat $KCONF_FRAG_ERRS |grep Warning: | wc -l | awk '{print $1}'`
-	echo There were $OPT_COUNT instances of config fragment errors.
-	echo The full list can be found in your workspace at:
-	echo $KCONF_FRAG_ERRS | sed 's=^'$TOP_BUILD_DIR'/=   ='
-	echo
-fi
-if [ -s $KCONF_OVERRIDE ]; then
-	OPT_COUNT=`cat $KCONF_OVERRIDE |grep Value | wc -l | awk '{print $1}'`
-	echo There were $OPT_COUNT kernel config options redefined during processing this BSP.
-	echo These config options are defined in more than one config fragment.
-	echo The full list can be found in your workspace at:
-	echo $KCONF_OVERRIDE | sed 's=^'$TOP_BUILD_DIR'/=   ='
-	echo
-fi
 
 # Preserve old file (and associated timestamps) if content is unchanged
 if [ -f $OLD_KERNEL_CFG ]; then
