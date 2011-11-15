@@ -43,7 +43,7 @@ usage()
 {
 cat << EOF
 
-    configme [--audit] [--reconfig] [--o <outdir>] [target] [machine]
+    configme [--audit] [--allnoconfig] [--reconfig] [--o <outdir>] [target] [machine]
 
         audit: do an audit of final .config file
         reconfig: reconfigure an existing build
@@ -172,27 +172,38 @@ run_board_config()
     fi
 
     KTGT=`get_branch_name $META`
-    generate_cfg $CFGFILE /dev/null `pwd` $BUILD_DIR $KTGT
 
+    frags=`cat $META_DIR/cfg/$KTGT/config_frag.txt | sed 's%\(^.*$\)%'$META_DIR/cfg'\1%'`
+    pre_config -l $META_DIR/cfg/$KTGT/ $frags > $META_DIR/cfg/$KTGT/config.log 2>&1
+
+    # remove any old assembled debug fragments
+    rm -f $BUILD_DIR/.tmp.config*
+
+    merge_frags=`cat $META_DIR/cfg/$KTGT/config_frag.txt | sed 's%\(^.*$\)%'$META_DIR/cfg'\1.sanitized%'`
+    ARCH=$KARCH O=$BUILD_DIR merge_config.sh $allnoconfig -d $merge_frags  \
+                                      > $META_DIR/cfg/$KTGT/merge_log.txt 2>&1
+
+    mv $BUILD_DIR/.tmp.config* $META_DIR/cfg/$KTGT/$CFGFILE
     if [ $? != 0 ]; then
-	echo creation of pre-processed config data failed
-	return 1
-    fi
+     	echo creation of pre-processed config data failed
+     	return 1
+     fi
 
     echo "[INFO] Pre-processed cfg file $CFGFILE created."
 
-    make ARCH=$KARCH O=$BUILD_DIR \
-	KBUILD_DEFCONFIG=../../../$META_DIR/cfg/$KTGT/$CFGFILE \
-	defconfig > $META_DIR/cfg/$KTGT/config.log 2>&1
+    # this is the 'old' way, kept as a double check
+    if [ -n "$VERIFY_CONFIG" ]; then
+    	make ARCH=$KARCH O=$BUILD_DIR \
+     	    KBUILD_DEFCONFIG=../../../$META_DIR/cfg/$KTGT/$CFGFILE \
+     	    defconfig > $META_DIR/cfg/$KTGT/config.log 2>&1
 
-    if [ $? != 0 ]; then
-	echo Kernel LKC processing of raw config data failed \($KARCH\)
-	echo See $META_DIR/cfg/$KTGT/config.log for details.
-	return 1
+	if [ $? != 0 ]; then
+   	    echo Kernel LKC processing of raw config data failed \($KARCH\)
+     	    echo See $META_DIR/cfg/$KTGT/config.log for details.
+     	    return 1
+	fi
     fi
-
     echo "[INFO] processing of raw cfg data completed."
-
     if [ $QUICK -ne 1 ]; then
 	kconf_check $CFGFILE /dev/null `pwd` $BUILD_DIR $KTGT
     fi
@@ -232,6 +243,9 @@ while [ $# -gt 0 ]; do
 	    --reconfig)
 		reconfig=t
 		;;
+	    --allnoconfig)
+		allnoconfig=-n
+		;;
 	    --output|-o|--o)
 		out_dir=$2
 		shift
@@ -252,7 +266,6 @@ machine=$2
 if [ -z "$target" ]; then
     target=$CURRENT
 fi
-echo "[INFO] Finding user(s) of branch \"$target\""
 
 # we need to condition the branch. If it is in the form that
 # uses / for inheritance, special processing needs to be done.
