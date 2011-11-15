@@ -320,7 +320,7 @@ if [ -n "$new_repo" ] || [ -n "$existing_but_flat_repo" ]; then
 
     install_resources
 
-    # turn guilt autoagging off, we don't use them manually and don't
+    # turn guilt autotagging off, we don't use them manually and don't
     # want the tags floating around after we are done.
     #    correction: we need this for "refresh"
     # git config --global guilt.autotag 0
