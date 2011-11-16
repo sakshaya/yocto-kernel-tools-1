@@ -20,17 +20,13 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #  See the GNU General Public License for more details.
 
-clean_up() {
-       rm -f $TMP_FILE
-       exit
-}
-trap clean_up SIGHUP SIGINT SIGTERM
 
 usage() {
 	echo "Usage: $0 [OPTIONS] [CONFIG [...]]"
 	echo "  -h    display this help text"
 	echo "  -m    only merge the fragments, do not execute the make command"
 	echo "  -n    use allnoconfig instead of alldefconfig"
+	echo "  -d    debug. Don't cleanup temporary files"
 }
 
 MAKE=true
@@ -48,6 +44,11 @@ while true; do
 		shift
 		continue
 		;;
+	"-d")
+		DEBUG=true
+		shift
+		continue
+		;;
 	"-h")
 		usage
 		exit
@@ -58,6 +59,13 @@ while true; do
 	esac
 done
 
+clean_up() {
+       rm -f $TMP_FILE
+       exit
+}
+if [ -z "$DEBUG" ]; then
+	trap clean_up SIGHUP SIGINT SIGTERM
+fi
 
 
 MERGE_LIST=$*
@@ -91,7 +99,9 @@ if [ "$MAKE" = "false" ]; then
 	echo "#"
 	echo "# merged configuration written to .config (needs make)"
 	echo "#"
-	clean_up
+	if [ -z "$DEBUG" ]; then
+		clean_up
+	fi
 	exit
 fi
 
@@ -114,4 +124,6 @@ for CFG in $(sed -n "$SED_CONFIG_EXP" $TMP_FILE); do
 	fi
 done
 
-clean_up
+if [ -z "$DEBUG" ]; then
+	clean_up
+fi
