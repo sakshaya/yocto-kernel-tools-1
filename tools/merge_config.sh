@@ -29,7 +29,7 @@ usage() {
 	echo "  -d    debug. Don't cleanup temporary files"
 }
 
-MAKE=true
+MAKE_FLAG=true
 ALLTARGET=alldefconfig
 
 while true; do
@@ -40,7 +40,7 @@ while true; do
 		continue
 		;;
 	"-m")
-		MAKE=false
+		MAKE_FLAG=false
 		shift
 		continue
 		;;
@@ -94,7 +94,7 @@ for MERGE_FILE in $MERGE_LIST ; do
 	cat $MERGE_FILE >> $TMP_FILE
 done
 
-if [ "$MAKE" = "false" ]; then
+if [ "$MAKE_FLAG" = "false" ]; then
 	cp $TMP_FILE .config
 	echo "#"
 	echo "# merged configuration written to .config (needs make)"
