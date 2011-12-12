@@ -79,6 +79,13 @@ while [ $# -gt 0 ]; do
                     x=`echo $1 | sed s%^-*D%%`
                 fi
 		defines="$defines $x" ;;
+            -I*|--I*)
+                if [ "$1" == "-I" ] || [ "$1" == "--I" ]; then
+                    x=$2; shift;
+		else
+                    x=`echo $1 | sed s%^-*I%%`
+                fi
+		includes="$includes -I$x" ;;
 	    --no-strict)
 		nostrict=t
 		;;
@@ -130,6 +137,13 @@ fi
 
 gen_dirs() {
 	top_dir=$1
+
+	for dir in $includes; do
+	    x=`echo $dir | sed s%^-*I%%`
+	    if [ -d "$x" ]; then
+		search_dirs="$search_dirs $x"
+	    fi
+	done
 
 	potential=`find $top_dir -maxdepth 3 -type d -name kernel*cache`
 	for dir in $potential; do
@@ -429,10 +443,10 @@ do_addon_features()
 	feats=$@
 
 	for f in $feats; do
+	        found_feat=
 		for d in $search_dirs; do
 		        search_feat=`_strip_ext $f .scc`
 			potential=`find $d | grep -E ".*$search_feat\.scc"`
-			found_feat=
 			if [ -n "$potential" ]; then
 				addon_features="$addon_features $potential"
 				found_feat="$potential"
