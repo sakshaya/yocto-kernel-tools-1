@@ -114,6 +114,7 @@ while [ $# -gt 0 ]; do
 		;;
 	-m|--m)
 		message="$2"
+		init_creates_content=t
 		shift
 		;;
 	-o|--o)
@@ -247,7 +248,7 @@ if [ -n "$new_repo" ]; then
 	    else
 		cd $dest
 		git config core.bare false
-		git checkout -f $checkout_opts master
+		git checkout -q -f $checkout_opts master
 	    fi
 
 	    if [ -n "$clean" ]; then
@@ -277,7 +278,7 @@ if [ -n "$new_repo" ]; then
 	     	    existing_repo_no_metadata=
 		fi
 	    else
-		git checkout -f $checkout_opts master
+		git checkout -q -f $checkout_opts master
 		git reset --hard $initial_branch_point
 	    fi
 	else
@@ -353,11 +354,13 @@ if [ -n "$new_repo" ] || [ -n "$existing_but_flat_repo" ]; then
 	git commit -q -m "$message"
     fi
 
-    # create a meta-information branch
-    git branch $meta_branch $initial_branch_point
-
-    # tag the base
-    git tag "meta_`date +%F`" $initial_branch_point
+    git show-ref --quiet --verify -- "refs/heads/$meta_branch";
+    if [ $? -eq 1 ]; then
+        # create a meta-information branch
+	git branch $meta_branch $initial_branch_point
+        # tag the base
+	git tag "meta_`date +%F`" $initial_branch_point
+    fi
 fi
 
 if [ -n "$existing_repo" ]; then
