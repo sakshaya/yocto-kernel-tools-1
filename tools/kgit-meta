@@ -972,7 +972,7 @@ wrap_meta_series()
 	    echo ""
 	    echo "<=== processed $_meta_series in $_duration seconds"
 	else
-	    progress_done "in $duration seconds"
+	    progress_done "in $_duration seconds"
 	fi
     fi
 }
