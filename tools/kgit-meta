@@ -807,6 +807,11 @@ do_git()
 		 fi
 
 		 eval git $cmd
+		 ret=$?
+		 if [ $ret -ne 0 ]; then
+		     echo "ERROR: could not complete git cmd \"git $cmd\""
+		     exit $ret
+		 fi
 		 ;;
 	esac
     fi
@@ -977,6 +982,18 @@ wrap_meta_series()
     fi
 }
 
+# Checks that git is configured properly for merge/commit operations
+# If it isn't globally configured, the repository is configured locally
+# to allow commits to the repo
+git_sanity_check()
+{
+    git config --global --get user.name > /dev/null
+    if [ $? -ne 0 ]; then
+	git config user.name "Auto Configured"
+	git config user.email "auto.configured"
+    fi
+}
+
 #
 # gather and organize the information require to generate a repo
 if [ -n "$_rc_file" ] && [ -e "$_rc_file" ]; then
@@ -1047,6 +1064,8 @@ if [ -n "$_patch_apply" ]; then
     if [ -n "$verbose" ]; then
 	echo "[INFO] validating against known patches  (`basename $_meta_series`)"
     fi
+
+    git_sanity_check
 
     # this will actually apply the patches and tag the tree
     # process_meta_series "patch"
