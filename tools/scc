@@ -28,7 +28,8 @@ last_cmd=""
 processed_files=""
 excluded_features=""
 inherit_flag=t
-version=1.1
+version=1.2
+scc_strict=t
 
 # ----------------------------------------------------------------------
 # start command line processing support functions
@@ -577,9 +578,9 @@ branch()
 {
     if [ "$last_cmd" == "patch" ]; then
         _dump " \\"
-	_dump -n "      echo \"# _branch_begin $1\""
+	_dump -n "      echo \"# _branch_begin $1 $2\""
     else
-	_dump "   _cmds=\$(echo \"\$_cmds\" ; echo \"# _branch_begin $1\")"
+	_dump "   _cmds=\$(echo \"\$_cmds\" ; echo \"# _branch_begin $1 $2\")"
     fi
 }
 
@@ -803,10 +804,17 @@ patch()
 	    name_only=`basename $tmp`
 	    tmp2=`search_include_paths $name_only`
 	    if [ -z "$tmp2" ]; then
-		if [ -n "$verbose" ]; then
-		    echo "WARNING could not find patch $tmp"
-		fi
-		return
+                if [ "$scc_strict" = "t" ]; then
+                    echo ""
+                    echo "ERROR: patch $tmp is not available"
+                    echo ""
+                    exit 1
+                else
+                    if [ -n "$verbose" ]; then
+                        echo "WARNING: could not find patch $tmp"
+                    fi
+                fi
+                return
 	    fi
 	    tmp=$tmp2
 	fi
@@ -848,6 +856,15 @@ define()
 
     # add to the preamble
     dump_vars=$(echo "$dump_vars"; echo export $var=$value)
+
+    # propagate it to the generated scripts
+    if [ "$last_cmd" == "patch" ]; then
+        # there was an open command replacement, let's close it
+        _dump '`'
+    fi
+    _dump "   _cmds=\$(echo \"\$_cmds\"; echo \"# _define $var $value\");"
+
+    last_cmd=define
 }
 
 # used by feature scripts
@@ -1202,6 +1219,9 @@ process_feature()
 {
     pfeat=$1
     small_feat=$2
+
+    # reset scc_strict per-feature
+    scc_strict=t
 
     if [ ! -e "$pfeat" ]; then
         return
