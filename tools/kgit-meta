@@ -489,11 +489,12 @@ do_branch()
 {
     local name=$1
     local force=$2
+    local branchpoint=$3
     local create=
 
     name=`generate_branch_name $1 $last_branch`
 
-    if [ -n "$force" ]; then
+    if [ "$force" = "force" ] || [ "$force" = "t" ]; then
 	# if the branches have diverged (i.e. another force)
 	# and we don't have "multi_branch_divergence" then
 	# don't do anything
@@ -538,6 +539,11 @@ do_branch()
 	
 	if [ -n "$last_passed_patch" ]; then
 	    pcommit=`grep $last_passed_patch $status_file | cut -d: -f1`
+	fi
+
+	# branchpoint get's the last say about from where we branch
+	if [ -n "$branchpoint" ]; then
+	    pcommit=$branchpoint
 	fi
 
 	track_branch $last_branch
@@ -806,11 +812,23 @@ do_git()
 		     echo "      * issuing: git $cmd"
 		 fi
 
+		 # if git_warn_only hasn't been set already, test to see if
+		 # we are creating a branch. If we are, set the default to be warn
+		 # only, since creating a branch multiple times is a common operation
+		 if [ -z "$git_warn_only" ]; then
+		     echo $cmd | grep -q branch
+		     if [ $? -eq 0 ]; then
+			 git_warn_only=t
+		     fi
+		 fi
+
 		 eval git $cmd
 		 ret=$?
-		 if [ $ret -ne 0 ]; then
-		     echo "ERROR: could not complete git cmd \"git $cmd\""
-		     exit $ret
+		 if [ -z "$git_warn_only" ]; then
+		     if [ $ret -ne 0 ]; then
+			 echo "ERROR: could not complete git cmd \"git $cmd\""
+			 exit $ret
+		     fi
 		 fi
 		 ;;
 	esac
@@ -902,16 +920,25 @@ _cfg()
     do_cfg "$d"
 }
 
+_define()
+{
+    var=$1                                                                                                                                
+    value=$2                                                                                                                              
+                                                                                                                                          
+    eval $var=$value   
+}
+
 _branch_begin()
 {
     name=$1
     force=$2
+    branchpoint=$3
 
     do_pending_patches
 
     # do branch will let us know if the branch
     # already existed. 
-    do_branch $name $force
+    do_branch $name $force $branchpoint
     if [ -z "$active_patching" ]; then
 	fast_forward_to_next_branch=t
     else
@@ -948,7 +975,7 @@ wrap_meta_series()
 
     # if no limitation was passed, allow all commands to be run
     if [ -z "$_valid_meta_cmds" ]; then
-	_valid_commands="_cfg _mark _git _branch_begin _reloc_dir _kconf _force_branch _patch"
+	_valid_commands="_cfg _mark _git _branch_begin _reloc_dir _kconf _force_branch _patch _define"
     fi
     # generate a sed script
     rm -f sed_script.cmds
