@@ -468,6 +468,12 @@ check_board()
     return $?
 }
 
+## used in the feature scripts to trigger strict patch checking
+scc_strict()
+{
+    scc_strict=$1
+}
+
 ## used in the feature scripts
 ## $1 is the patch to override
 override()
