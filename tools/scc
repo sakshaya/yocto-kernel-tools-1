@@ -580,13 +580,14 @@ git()
 # used in feature scripts
 #    arg1: the branch name
 #    arg2: the source branch name
+#    arg3 and up: flags
 branch()
 {
     if [ "$last_cmd" == "patch" ]; then
         _dump " \\"
-	_dump -n "      echo \"# _branch_begin $1 $2\""
+	_dump -n "      echo \"# _branch_begin $@\""
     else
-	_dump "   _cmds=\$(echo \"\$_cmds\" ; echo \"# _branch_begin $1 $2\")"
+	_dump "   _cmds=\$(echo \"\$_cmds\" ; echo \"# _branch_begin $@\")"
     fi
 }
 
@@ -975,7 +976,7 @@ include()
             fi
 
 	    force_branch_name="`basename $fname`_excluded-auto"
-            _dump "   _cmds=\$(echo \"\$_cmds\"; echo \"# _force_branch $force_branch_name force\")"
+            _dump "   _cmds=\$(echo \"\$_cmds\"; echo \"# _force_branch $force_branch_name\")"
 	    last_cmd=
         fi
     fi
@@ -1090,20 +1091,20 @@ do_ctx_mod()
 
     work_dir=$current_patch_dir
     if [ "$archs" == "all" ] || [ "$plats" == "all" ]; then
-        _dump "   _cmds=\$(echo \"\$_cmds\" | sed 's%^.*$base_patch$%\# _force_branch $active_feature-$force_name force\n\# _patch $work_dir/$out_name%');";
+        _dump "   _cmds=\$(echo \"\$_cmds\" | sed 's%^.*$base_patch$%\# _force_branch $active_feature-$force_name\n\# _patch $work_dir/$out_name%');";
 	_dump "   _potential_auto_branch=$force_name"
     else
         # TODO: these can be lists of plats, or archs ... could loop
         if [ -n "$plats" ]; then
             # platform specific test and output
             _dump "   if [ \"\$PLATFORM\" == \"$plats\" ]; then "
-            _dump "      _cmds=\$(echo \"\$_cmds\" | sed 's%^.*$base_patch$%\# _force_branch $active_feature-$force_name force\n\# _patch $work_dir/$out_name%');"
+            _dump "      _cmds=\$(echo \"\$_cmds\" | sed 's%^.*$base_patch$%\# _force_branch $active_feature-$force_name\n\# _patch $work_dir/$out_name%');"
 	    _dump "      _potential_auto_branch=$force_name"
             _dump "   fi"
         fi;
         if [ -n "$archs" ]; then
             _dump "   if [ \"\$KERNEL_ARCH\" == \"$archs\" ]; then ";
-            _dump "      _cmds=\$(echo \"\$_cmds\" | sed 's%^.*$base_patch$%\# _force_branch $active_feature-$force_name force\n\# _patch $work_dir/$out_name%');";
+            _dump "      _cmds=\$(echo \"\$_cmds\" | sed 's%^.*$base_patch$%\# _force_branch $active_feature-$force_name\n\# _patch $work_dir/$out_name%');";
 	    _dump "      _potential_auto_branch=$force_name"
             _dump "   fi"
         fi
@@ -1126,17 +1127,17 @@ do_exclude()
     force_name=`_strip_ext $tgt_patch .patch`
 
     if [ "$archs" == "all" ] || [ "$plats" == "all" ]; then
-        _dump "   _cmds=\$(echo \"\$_cmds\" | sed \"s%^.*$tgt_patch$%\# _force_branch $current_feature-$force_name force\n%\");";
+        _dump "   _cmds=\$(echo \"\$_cmds\" | sed \"s%^.*$tgt_patch$%\# _force_branch $current_feature-$force_name\n%\");";
 	_dump "   _potential_auto_branch=$force_name"
     else
         if [ -n "$archs" ]; then
             _dump "   if [ \"\$KERNEL_ARCH\" == \"$archs\" ]; then ";
-            _dump "      _cmds=\$(echo \"\$_cmds\" | sed \"s%^.*$tgt_patch$%\# _force_branch $current_feature-$force_name force\n%\");";
+            _dump "      _cmds=\$(echo \"\$_cmds\" | sed \"s%^.*$tgt_patch$%\# _force_branch $current_feature-$force_name\n%\");";
 	    _dump "      _potential_auto_branch=$force_name"
             _dump "   fi"
         elif [ -n "$plats" ]; then
             _dump "   if [ \"\$PLATFORM\" == \"$plats\" ]; then ";
-            _dump "      _cmds=\$(echo \"\$_cmds\" | sed \"s%^.*$tgt_patch$%\# _force_branch $current_feature-$force_name force\n%\");";
+            _dump "      _cmds=\$(echo \"\$_cmds\" | sed \"s%^.*$tgt_patch$%\# _force_branch $current_feature-$force_name\n%\");";
 	    _dump "      _potential_auto_branch=$force_name"
             _dump "   fi"
         fi
@@ -1829,6 +1830,18 @@ link_file()
 	_dump "$i"
     done
 
+    # The first clause of this block is to allow any generated script to
+    # respond to a command line option "branch_point" or "branchpoints". When
+    # that is passed, the script will dump all the branchpoints that would be
+    # created by executing the script.
+    #
+    # The second clause is when the output script is run normally to output a
+    # meta script. In that case any 'auto branch' points are features that
+    # were noted during processing of the script by changed patches /
+    # includes / excludes, etc. Those auto branches are still in the output
+    # as feature start tags "_mark $feature_name start", and the must be
+    # replaced by a branch in the final output.
+    # 
     _dump ''
     _dump 'if [ -n "$1" ] && ([ "$1" = "branch_points" ] || [ "$1" = "branchpoints" ]) ; then'
     _dump '   if [ -n "$_auto_branch" ]; then'
@@ -1838,7 +1851,7 @@ link_file()
     _dump 'else'
     _dump '   # this replaces the feature markers with branch points'
     _dump '   for b in $_auto_branch; do'
-    _dump '         output=$(echo "$output" | sed "s/_mark $b start/_branch_begin $b-auto force/" )'
+    _dump '         output=$(echo "$output" | sed "s/_mark $b start/_force_branch $b-auto/" )'
     _dump '   done'
     _dump '   echo "$output"'
     _dump '   echo "# _branches_local: $_auto_branch"'

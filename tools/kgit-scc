@@ -411,8 +411,7 @@ if [ -n "$init" ]; then
 		exit 1
 	    fi
 
-	    kgit-init -v -m "base: create tree baseline" \
-                                      $input $base_ver $output
+	    kgit-init -v $input $base_ver $output
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. Unable to clone source repository $input"
 		exit 1
@@ -668,7 +667,7 @@ if [ -n "$apply" ]; then
 		exit 1
 	    fi
 	    if [ -n "$extra" ]; then
-		echo "[INFO] Updating cfg files"
+		echo "[INFO] Updating cfg files (kgit-meta --update --kconf $meta_dir/$e-meta)"
 		kgit-meta --update --kconf $meta_dir/$e-meta
 	    fi
 

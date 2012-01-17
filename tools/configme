@@ -58,31 +58,7 @@ get_branch_name()
 {
     _meta_series=$1
 
-    branchpoints=`cat $_meta_series|grep '_branch_begin\|_force_branch'|awk '{print $3"|"$4}'`
-    if [ -z "$branchpoints" ]; then
-	branchpoints=master
-    fi
-
-old_ifs=$IFS
-IFS='
-'
-    for i in $branchpoints ; do
-	name=`echo  $i | cut -d'|' -f1`
-	force=`echo $i | cut -d'|' -f2`
-
-        # pickup the first forced branch, we'll throw the rest away as
-	# "branches". Meaning they won't have been created as branches
-	# unless multi_branch_divergence was specified
-  	if [ -z "$branchname" ]; then
-	    branchname=$name
-	else
-	    if [  "$META_DIR" == "meta" ]; then
-		branchname="$branchname/$name"
-	    else
-		branchname=$name
-	    fi
-	fi
-    done
+    branchname=`git branch |grep \*|sed 's/^\* //'| sed 's%/base$%%'`
 
     echo $branchname
 }

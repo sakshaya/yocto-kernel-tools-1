@@ -362,37 +362,51 @@ do_cfg()
 }
 
 # arg1: the name the caller would like
-# arg2: the current / parent branch
+# arg2: should anyone inehrit this branch? (t/f)
+# arg3: the current / parent branch (optional)
 generate_branch_name()
 {
     suggested_name=$1
-    last_passed_branch=$2
+    noinherit=$2
+    last_passed_branch=$3
 
     all_possible_branches=`cat $meta_dir/meta-series | grep -E "^# _branch_begin" \
                              | sed 's/^# _branch_begin //'`
     who_is_last_branch=`echo "$all_possible_branches" | tail -1`
 
     if [ -n "$show_inheritance_in_branches" ]; then
-	# if there are more branches to be created, we need to add a /base
+   	# if there are more branches to be created, we need to add a /base
 	# onto this branch, or the subsequent ones will have problems.
-	if [ "$who_is_last_branch" != "$suggested_name" ]; then
-	    suggested_name="$suggested_name/base"
+        if [ "$noinherit" = "f" ]; then
+	    if [ "$who_is_last_branch" != "$suggested_name" ]; then
+		suggested_name="$suggested_name/base"
+	    fi
 	fi
 
 	# if we have already passed one branch (last_branch is non zero)
-	# then we should log that branch name in current
+	# then we should log that branch name in current. But if the last
+	# passed branch is a 'noinherit' branch, we won't do this since that
+	# means it's name should not appear in other branches
 	if [ -n "$last_passed_branch" ]; then
-	    # if a branch has a child it will have been renamed 
-	    # <branch>/base, but in any new branch we create, we
-	    # don't want to be under <branch>/base, we want to 
-	    # be under <branch>, so we remove any instances of
-	    # 'base' that may be in the actual branch name
-	    last_passed_clean=`echo $last_passed_branch | sed 's%/base%%g'`
-	    suggested_name=$last_passed_clean/$suggested_name
+	    noinherit_considered=$last_passed_branch
+	    for b in $noinherit_branches; do
+		noinherit_considered=`echo $noinherit_considered | sed "s%$b%%"`
+	    done
+	    #if [ -z "$noinherit_found" ]; then
+	        # if a branch has a child it will have been renamed 
+	        # <branch>/base, but in any new branch we create, we
+	        # don't want to be under <branch>/base, we want to 
+	        # be under <branch>, so we remove any instances of
+	        # 'base' that may be in the actual branch name
+		last_passed_clean=`echo $noinherit_considered | sed 's%/base%%g'`
+		if [ -n "$last_passed_clean" ]; then
+		    suggested_name=$last_passed_clean/$suggested_name
+		fi
+	    #fi
 	fi
     fi
 
-    echo $suggested_name
+    echo $suggested_name | sed 's%/\+%/%g'
 }
 
 sanitize_repo_for_branch()
@@ -487,17 +501,40 @@ branch_prep()
 # to make sure it still is OK.
 do_branch()
 {
-    local name=$1
-    local force=$2
-    local branchpoint=$3
+    args=$@
+    flags=
+    name=
+
+    for a in $args; do
+	case $a in
+	    -*) flags="$flags $a" ;;
+	    *) if [ -z "$name" ]; then
+		   name=$a
+	       else
+                   branchpoint=$a
+	       fi ;;
+        esac
+    done
+
     local create=
 
-    name=`generate_branch_name $1 $last_branch`
+    # check the flags
+    echo "$flags" | grep -q "force"
+    if [ $? -eq 0 ]; then
+	force=force
+    fi
+    noinherit=f
+    echo "$flags" | grep -q "noinherit"
+    if [ $? -eq 0 ]; then
+	noinherit=t
+	noinherit_branches="$noinherit_branches $name"
+    fi
 
-    if [ "$force" = "force" ] || [ "$force" = "t" ]; then
-	# if the branches have diverged (i.e. another force)
-	# and we don't have "multi_branch_divergence" then
-	# don't do anything
+    name=`generate_branch_name $name $noinherit $last_branch`
+
+    if [ "$force" = "force" ]; then
+	# if the branches have diverged (i.e. another force) and we don't
+	# have "multi_branch_divergence" then don't do anything
 	if [ -z "$branches_have_diverged" ] ||
             ([ -n "$branches_have_diverged" ] && 
 	     [ -n "$multi_branch_divergence" ]); then
@@ -561,7 +598,7 @@ do_branch()
 	fi
 
 	active_patching=t
-    else	
+    else
 	git checkout -q $name
 	if [ $? -ne 0 ]; then
 	    echo "ERROR: could not checkout branch $name"
@@ -922,23 +959,24 @@ _cfg()
 
 _define()
 {
-    var=$1                                                                                                                                
-    value=$2                                                                                                                              
-                                                                                                                                          
-    eval $var=$value   
+    var=$1
+    value=$2
+
+    eval $var=$value
 }
 
+# arg 1 is always the branch name. There is then an optional
+# branch source, followed by flags. All flags start with -.
+# so we parse them out appropriately.
 _branch_begin()
 {
-    name=$1
-    force=$2
-    branchpoint=$3
+    args=$@
 
-    do_pending_patches
+    do_pending_patches 
 
     # do branch will let us know if the branch
     # already existed. 
-    do_branch $name $force $branchpoint
+    do_branch $args
     if [ -z "$active_patching" ]; then
 	fast_forward_to_next_branch=t
     else
@@ -948,7 +986,7 @@ _branch_begin()
 
 _force_branch()
 {
-    _branch_begin $@
+    _branch_begin -force $@
 }
 
 _reloc_dir()
@@ -976,6 +1014,8 @@ wrap_meta_series()
     # if no limitation was passed, allow all commands to be run
     if [ -z "$_valid_meta_cmds" ]; then
 	_valid_commands="_cfg _mark _git _branch_begin _reloc_dir _kconf _force_branch _patch _define"
+    else
+	_valid_commands=$_valid_meta_cmds
     fi
     # generate a sed script
     rm -f sed_script.cmds
@@ -1168,35 +1208,14 @@ if [ -n "$_kconf" ]; then
 	    echo "[INFO] collecting configs in $_meta_series "
 	fi
 
-	branchpoints=`cat $_meta_series|grep '_branch_begin\|_force_branch'|awk '{print $3"|"$4}'`
-	if [ -z "$branchpoints" ]; then
-	    branchpoints=master
+	# calling this will leave the tree on the last branch created
+	# by the meta series
+	wrap_meta_series $_meta_series "_branch_begin _force_branch"
+	branchname=`git branch |grep \*|sed 's/^\* //'| sed 's%/base$%%'`
+
+	if [ ! -d "$meta_dir/cfg/$branchname/" ]; then
+	    mkdir -p $meta_dir/cfg/$branchname/
 	fi
-
-old_ifs=$IFS
-IFS='
-'
-	for i in $branchpoints ; do
-	    name=`echo  $i | cut -d'|' -f1`
-	    force=`echo $i | cut -d'|' -f2`
-	    
-	    # pickup the first forced branch, we'll throw the rest away as
-	    # "branches". Meaning they won't have been created as branches
-	    # unless multi_branch_divergence was specified
-	    if [ -z "$force" ] || [ -n "$multi_branch_divergence" ]; then
-  		if [ -z "$branchname" ]; then
-		    branchname=$name
-		else
-		    if [ -n "$show_inheritance_in_branches" ]; then
-			branchname="$branchname/$name"
-		    else
-			branchname=$name
-		    fi
-		fi
-	    fi
-	done
-
-	mkdir -p $meta_dir/cfg/$branchname/
 
 	if [ -z "$_continue" ]; then
 	    rm -f $meta_dir/cfg/$branchname/{non_,}hdw_frags.txt
@@ -1225,7 +1244,6 @@ IFS='
 			exit 1
 		fi
 	done
-IFS=$old_ifs
 
 	do_config_setup $meta_dir/cfg/$branchname/$fraglist $branchname
 fi
