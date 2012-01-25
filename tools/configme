@@ -165,6 +165,10 @@ run_board_config()
      	return 1
      fi
 
+    # break the merge log down into parts that can be processed later
+    grep -A2 "^Value of" $META_DIR/cfg/$KTGT/merge_log.txt > $META_DIR/cfg/$KTGT/redefinition.txt
+    grep -A2 "^Value requested" $META_DIR/cfg/$KTGT/merge_log.txt > $META_DIR/cfg/$KTGT/mismatch.txt
+
     echo "[INFO] Pre-processed cfg file $CFGFILE created."
 
     # this is the 'old' way, kept as a double check
