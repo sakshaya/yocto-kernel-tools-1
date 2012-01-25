@@ -58,6 +58,10 @@ CONF_HDW=$LOGDIR/always_hardware.cfg
 # Same for non-hardware CONFIG items that are in a hardware Kconfig.
 CONF_NONHDW=$LOGDIR/always_nonhardware.cfg
 
+CONF_REQUIRED=$LOGDIR/required_configs.cfg
+CONF_OPTIONAL=$LOGDIR/optional_configs.cfg
+
+
 # Egads. People are listing the same thing multiple times within a fragment.
 #  An evil sin that deserves its own category (and insults).
 KCONF_FRAG_ERRS=$LOGDIR/fragment_errors.txt
@@ -104,7 +108,7 @@ function sanitize_fragment ()
 }
 
 rm -f $KCONF_FRAG_ERRS $KCONF_NONHDW $KCONF_HDW \
-      $CONF_NONHDW $CONF_HDW
+      $CONF_NONHDW $CONF_HDW $CONF_REQUIRED $CONF_OPTIONAL
 
 # Assemble fragments and collect lists of new/added Kconfigs
 # 1st pass is to just collect all the state info -- i.e. the
@@ -134,6 +138,14 @@ for f in $FRAGS; do
 		cat $frag_dir/hardware.cfg | grep -v '^#' | \
 			sed '/^$/d' >> $CONF_HDW
 	fi
+	if [ -f $frag_dir/required.cfg ]; then
+		cat $frag_dir/required.cfg | grep -v '^#' | \
+			sed '/^$/d' >> $CONF_REQUIRED
+	fi
+	if [ -f $frag_dir/optional.cfg ]; then
+		cat $frag_dir/optional.cfg | grep -v '^#' | \
+			sed '/^$/d' >> $CONF_OPTIONAL
+	fi
 done
 
 if [ ! -f $KCONF_NONHDW ]; then
@@ -147,6 +159,12 @@ if [ ! -f $CONF_NONHDW ]; then
 fi
 if [ ! -f $CONF_HDW ]; then
     touch $CONF_HDW
+fi
+if [ ! -f $CONF_OPTIONAL ]; then
+    touch $CONF_OPTIONAL
+fi
+if [ ! -f $CONF_REQUIRED ]; then
+    touch $CONF_REQUIRED
 fi
 
 # Nobody ever specifies things as non-hardware.  All they ever do is lie like

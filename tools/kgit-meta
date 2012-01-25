@@ -315,7 +315,7 @@ do_kconf()
     local _cfg_file_dir=`dirname $1`
     local _cfg_file_name=`basename $1`
 
-    local kconf_files="hardware.kcf non-hardware.kcf hardware.cfg non-hardware.cfg"
+    local kconf_files="hardware.kcf non-hardware.kcf hardware.cfg non-hardware.cfg required.cfg optional.cfg"
 
     _reloc_cfg_file_dir=`_strip_common_prefix $_cfg_file_dir`
     if [ -d "$_cfg_file_dir" ]; then
@@ -1239,8 +1239,12 @@ if [ -n "$_kconf" ]; then
 			echo `_strip_common_prefix $fragname` >> $meta_dir/cfg/$branchname/hdw_frags.txt
 		elif [ x$fragtype = xnon-hardware ]; then
 			echo `_strip_common_prefix $fragname` >> $meta_dir/cfg/$branchname/non_hdw_frags.txt
+		elif [ x$fragtype = xrequired ]; then
+			echo `_strip_common_prefix $fragname` >> $meta_dir/cfg/$branchname/required_frags.txt
+		elif [ x$fragtype = xoptional ]; then
+			echo `_strip_common_prefix $fragname` >> $meta_dir/cfg/$branchname/optional_frags.txt
 		else
-			echo "[ERROR] type \"$fragtype\" of file \"$fragname\" is not hardware or non-hardware"
+			echo "[ERROR] type \"$fragtype\" of file \"$fragname\" is not a supported type"
 			exit 1
 		fi
 	done
