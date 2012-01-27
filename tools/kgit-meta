@@ -962,7 +962,7 @@ _define()
     var=$1
     value=$2
 
-    eval $var=$value
+    eval $var="\"$value\""
 }
 
 # arg 1 is always the branch name. There is then an optional

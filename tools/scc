@@ -263,50 +263,6 @@ cat  <<'EOF';
         o patch: Outputs a patch to be included in a feature's patch
                  set. Only the name of the patch is supplied, the path
                  is calculated from the currently set patch directory
-        o patch_trigger: indicates that an action should be triggered and performed
-                         on a patch. The syntax is:
-                              patch_trigger <condition> <action> <tgt>
-                         The conditions can be:
-                              o arch:<comma separated arch list or "all">
-                              o plat:<comma separated platform list or "all">
-                         The action can be:
-                              o exclude
-                              o include
-                              o ctx_mod
-                              o transform
-                ctx_mod: Indicates that a base patch has context modifications 
-                         due to different patch stacks using a common feature.
-                         The base patch is almost always the pristine upstream
-                         patch and the ctx_mods are context changes to allow the
-                         patch to apply in multiple stacks. This takes 1 argument
-                         the <base patch> name to modify as it appears in the 
-                         common feature.
-    
-                         The ctx_mod patch is found in the directory of the feature
-                         adding the trigger and must have a name dictated by the 
-                         condition indicated in the trigger.
-   
-                         If platforms or archs have been indicated in the conditional,
-                         the patch takes the form: <base patch>.<archs>. Where <archs>
-                         is an underscore separated list of archictures matching the 
-                         comma separated list used in the conditional
-    
-                         If "all" is the arch or platform trigger, the context patch
-                         takes the form: <base patch>.<feature with the trigger>
-    
-                         A context patch should be version controlled, but not hand 
-                         edited, and regenerated when required
-                exclude: This is used in exceptional situations where a patch
-                         cannot be applied for certain reasons (arch or platform).
-                         When the trigger is satisfied the patch will be removed from
-                         the patch list.
-                include: This is used to include a patch only for a specific trigger.
-                         Like exclude, this should only be used when necessary. 
-                         It takes 1 argument, the patch to include.
-              transform: modifies the patch set based on a
-                         a sed substitution format: /<match>/<replace>/ .
-                         multiple transforms can be applied in a single 
-                         feature or across many features.
         o include: Indicates that a particular feature should be
                    included and processed in order. There is an optional
                    parameter 'after <feat name>' to indicate that the order 
@@ -316,11 +272,6 @@ cat  <<'EOF';
         o exclude: Indicates that a particular feature should *not* be included
                    even if an 'include' directive is found. The exclude must be
                    issued before the include is processed.
-        o set_kernel_version: Takes a new kernel version as it's 
-                              argument. This allows a feature to change
-                              the effective kernel version and allows other
-                              features to test this value via the
-                              KERNEL_VERSION variable.
         o check_board: Tests if a particular board is being patched.
                        This allows a feature to change the patches
                        on a board specific basis. Logical actions should
@@ -452,6 +403,7 @@ _dump()
 }
 
 ## used in the feature scripts
+## depreciated: use "define KERNEL_VERSION <value>"
 set_kernel_version()
 {
     KERNEL_VERSION=$1
@@ -857,19 +809,19 @@ add_feature_to_process()
 define()
 {
     var=$1
-    value=$2
+    value="$2"
 
-    eval $var=$value
+    eval $var="\"$value\""
 
     # add to the preamble
-    dump_vars=$(echo "$dump_vars"; echo export $var=$value)
+    dump_vars=$(echo "$dump_vars"; echo export $var=\'"$value"\')
 
     # propagate it to the generated scripts
     if [ "$last_cmd" == "patch" ]; then
         # there was an open command replacement, let's close it
         _dump '`'
     fi
-    _dump "   _cmds=\$(echo \"\$_cmds\"; echo \"# _define $var $value\");"
+    _dump "   _cmds=\$(echo \"\$_cmds\"; echo \"# _define $var '$value'\");"
 
     last_cmd=define
 }
