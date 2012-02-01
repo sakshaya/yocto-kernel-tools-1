@@ -365,7 +365,8 @@ do_update() {
 		echo "define KARCH $arch" >> $ktgt.scc
 		echo "" >> $ktgt.scc
 
-		echo "scc_leaf ktypes/$parent $short_branchname" >> $ktgt.scc
+		echo "include ktypes/$parent" >> $ktgt.scc 
+		echo "branch $short_branchname" >> $ktgt.scc
 	    )
 
 	    top_tgt=$meta_dir/cfg/scratch/obj/$ktgt.scc
@@ -380,7 +381,7 @@ do_update() {
 		for c in $extra_cfgs; do
 		    b=`basename $c`
 		    cp $c .
-		    echo "kconf non-hardware $b" >> auto_feat.scc
+		    echo "kconf required $b" >> auto_feat.scc
 		done
 	    
 		extra_features="$extra_features auto_feat.scc"
