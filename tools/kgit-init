@@ -155,7 +155,7 @@ dest=$3
 
 meta_dir=meta
 meta_branch=meta
-content_branch=yocto/base
+content_branch=base
 
 # now fixup based on zero'd values
 if [ -z "$initial_branch_point" ]; then

@@ -1081,7 +1081,7 @@ if [ -d "wrs" ]; then
     content_branch="wrs_base"
 else
     meta_dir_name=meta
-    content_branch="yocto/base"
+    content_branch="base"
     show_inheritance_in_branches=t
 fi
 
