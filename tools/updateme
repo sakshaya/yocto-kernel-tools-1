@@ -170,7 +170,8 @@ split_command_line_objects() {
 	command_line_values=$@
 
 	for v in $command_line_values; do
-	    case $v in
+	    v_base=`basename $v`
+	    case $v_base in
 		*.scc) migrate_feature $v
 		    ;;
 		*.cfg) migrate_cfg $v
