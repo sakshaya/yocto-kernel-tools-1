@@ -20,7 +20,7 @@ usage()
 cat << EOF
 
  updateme [--no-strict] [-D<var>=<value>] [--branch ${kbranch}] [--feature <feature name>] \
-           ${ARCH} ${MACHINE} [features or directories]
+           ${ARCH} ${MACHINE} [ordered list of patches, .cfgs and features]
 
       --no-strict: do not error if a passed feature cannot be found
       --branch:    the branch to process for the machine definition. If not
@@ -32,12 +32,9 @@ cat << EOF
                    default options/configuration.
        ${MACHINE}: The name of the machine. This is used to locate the machine
                    description created via 'creatme'
-       [features or directories]: A space separated list of features or directories
-                                  to search for features. Any argument that is a
-                                  directory is added to the search dirs. Any argument
-                                  that is not a directory is considered a feature
-                                  name that should be added (similar to --feature,
-                                  which is the preferred method).
+       [ordered list of items]: A space separated list of .scc, .patch, .cfg or
+                                defconfig items to apply to the end of the 
+                                machine description.
 
 EOF
 }
@@ -107,8 +104,9 @@ machine=$2
 shift
 shift
 
-# everything else is features
-command_line_dirs=$@
+# everything else is patches, config fragments or feature descriptions
+# that are to be migrated under the kernel tree and added to the build
+patches_cfgs_sccs=$@
 
 # flags. if no-strict wasn't passed on the command line,
 # enable strict processing.
@@ -152,89 +150,147 @@ gen_dirs() {
 	done
 }
 
-# searches for extra files to build
-find_features() {
-	dirs=$@
+add_search_include_dir() {
+	dir=$1
 
-	for d in $dirs; do
-	    potential=`find $d -maxdepth 1 -type f -name *.scc`
-	    # we should *not* auto-add a .scc file that defines
-	    # KMACHINE, etc. These are leaf nodes that should be 
-	    # explicitly requested.
-	    for p in $potential; do
-		grep -q KMACHINE $p
-		if [ $? -ne 0 ]; then
-		    extra_features="$extra_features $p"
-		else
-		    cp $p $meta_dir/cfg/scratch/obj
-		fi
-	    done
+	abs_dir=`readlink -f $dir`
+
+	echo $search_dirs | grep -q $abs_dir
+	if [ $? -ne 0 ]; then
+		search_dirs="$search_dirs $abs_dir"
+	fi
+	echo $includes | grep -q $abs_dir
+	if [ $? -ne 0 ]; then
+		includes="$includes -I $abs_dir"
+	fi
+}
+
+# demux items passed on the command line
+split_command_line_objects() {
+	command_line_values=$@
+
+	for v in $command_line_values; do
+	    case $v in
+		*.scc) migrate_feature $v
+		    ;;
+		*.cfg) migrate_cfg $v
+		    ;;
+		*.patch) migrate_patch $v
+		    ;;
+		defconfig) migrate_cfg $v;;
+		*) ;;
+	    esac
 	done
 }
 
-# searches for extra configs to include, only if they haven't
-# been pulled into a .scc file already
-find_configs() {
-	dirs=$@
-	
-	# defconfigs should be found first, so fragments can tweak
-	# settings
-	for d in $dirs; do
-	    potential=`find $d -maxdepth 1 -type f -name defconfig`
-	    scc_files=`find $d -maxdepth 1 -type f -name *.scc` 
-	    for c in $potential; do
-		b=`basename $c`
-		f=`readlink -f $c`
-	    	# check to see if a .scc file already includes the fragement
-		if [ -n "$scc_files" ]; then
-			grep $b $d/*.scc -q
-			if [ $? -ne 0 ]; then
-		    		extra_cfgs="$extra_cfgs $f"
-			fi
-		else
-			extra_cfgs="$extra_cfgs $f"
-		fi
-	    done
-	done
+migrate_cfg() {
+	c=$1
 
-	for d in $dirs; do
-	    potential=`find $d -maxdepth 1 -type f -name *.cfg`
-	    scc_files=`find $d -maxdepth 1 -type f -name *.scc` 
-	    for c in $potential; do
-		b=`basename $c`
-		f=`readlink -f $c`
-	    	# check to see if a .scc file already includes the fragement
-		if [ -n "$scc_files" ]; then
-			grep $b $d/* -q
-			if [ $? -ne 0 ]; then
-		    		extra_cfgs="$extra_cfgs $f"
-			fi
-		else
-			extra_cfgs="$extra_cfgs $f"
+	dirname=`dirname $c`
+	if [ ! -d $meta_dir/cfg/scratch/obj/$dirname ]; then
+	    mkdir -p $meta_dir/cfg/scratch/obj/$dirname
+	fi
+
+	if [ -n "$verbose" ]; then
+		echo "migrating cfg: $c to $meta_dir/cfg/scratch/obj/$dirname"
+	fi
+	cp -r $dirname/* $meta_dir/cfg/scratch/obj/$dirname
+
+	scc_files=`find $meta_dir/cfg/scratch/obj/$dirname -maxdepth 1 -type f -name *.scc`
+	b=`basename $c`
+
+	# check to see if a .scc file already includes the fragement
+	gen_feature=
+	if [ -n "$scc_files" ]; then
+		grep $b $scc_files -q
+		if [ $? -ne 0 ]; then
+			gen_feature=t
 		fi
-	    done
-	done
+	else
+		gen_feature=t
+	fi
+
+	if [ -n "$gen_feature" ]; then
+		gen_feature_name="gen_`echo $dirname | sed 's%/%%g'`_desc.scc"
+
+		if [ -n "$verbose" ]; then
+			echo "generating auto feature: $gen_feature_name"
+		fi
+		echo "kconf required $b" >> $meta_dir/cfg/scratch/obj/$dirname/$gen_feature_name
+
+		# we've generated the feature, make sure it can be found
+		add_search_include_dir $meta_dir/cfg/scratch/obj/$dirname
+		extra_features="$extra_features $gen_feature_name"
+	fi
 }
 
-# searches for extra patches to include, only if they haven't
-# been pulled into a .scc file already
-find_patches() {
-	dirs=$@
-	
-	for d in $dirs; do
-	    potential=`find $d -maxdepth 1 -type f -name *.patch`
-	    potential="$potential `find $d -maxdepth 1 -type f -name *.diff`"
-	    potential="$potential `find $d -maxdepth 1 -type f -name *.mbox`"
-	    for c in $potential; do
-		b=`basename $c`
-		f=`readlink -f $c`
-	    	# check to see if a .scc file already includes the patch
-		grep $b $d/* -q
+
+migrate_patch() {
+	p=$1
+
+	dirname=`dirname $p`
+	if [ ! -d $meta_dir/cfg/scratch/obj/$dirname ]; then
+		mkdir -p $meta_dir/cfg/scratch/obj/$dirname
+	fi
+
+	if [ -n "$verbose" ]; then
+		echo "migrating patch: $p to $meta_dir/cfg/scratch/obj/$dirname"
+	fi
+	cp -r $dirname/* $meta_dir/cfg/scratch/obj/$dirname
+
+	scc_files=`find $meta_dir/cfg/scratch/obj/$dirname -maxdepth 1 -type f -name *.scc`
+	b=`basename $p`
+
+	# check to see if a .scc file already includes the patch
+	gen_feature=
+	if [ -n "$scc_files" ]; then
+		grep $b $scc_files -q
 		if [ $? -ne 0 ]; then
-		    extra_patches="$extra_patches $f"
+			gen_feature=t
 		fi
-	    done
-	done
+	else
+		gen_feature=t
+	fi
+
+	if [ -n "$gen_feature" ]; then
+		gen_feature_name="gen_`echo $dirname | sed 's%/%%g'`_desc.scc"
+
+		if [ -n "$verbose" ]; then
+			echo "generating auto feature: $gen_feature_name"
+		fi
+		echo "patch $b" >> $meta_dir/cfg/scratch/obj/$dirname/$gen_feature_name
+
+		# we've generated the feature, make sure it can be found
+		add_search_include_dir $meta_dir/cfg/scratch/obj/$dirname
+		extra_features="$extra_features $gen_feature_name"
+	fi
+}
+
+migrate_feature() {
+	feat=$1
+
+	dirname=`dirname $feat`
+	featname=`basename $feat`
+	if [ ! -d $meta_dir/cfg/scratch/obj/$dirname ]; then
+		mkdir -p $meta_dir/cfg/scratch/obj/$dirname
+	fi
+
+	if [ -n "$verbose" ]; then
+		echo "migrating feature: $feat to $meta_dir/cfg/scratch/obj/$dirname"
+	fi
+	cp -r $dirname/* $meta_dir/cfg/scratch/obj/$dirname
+
+	# we've migrated the feature, make sure it can be found
+	add_search_include_dir $meta_dir/cfg/scratch/obj/$dirname
+
+	# we should *not* auto-add a .scc file that defines
+	# KMACHINE, etc. These are leaf nodes that should be
+	# explicitly requested.
+	grep -q KMACHINE $feat
+	if [ $? -ne 0 ]; then
+		# add it to the features to be built into the meta-series
+		extra_features="$extra_features $featname"
+	fi
 }
 
 do_compile_prep() {
@@ -310,7 +366,8 @@ search_includes_for_defines()
 		fi
 	done
 
-	echo "$found_scc"
+	# return the first target found (among equals)
+	echo "$found_scc" | cut -f2 -d' '
 }
 
 do_update() {
@@ -377,31 +434,8 @@ do_update() {
 
 	# this builds and applies the meta-series
 	( cd $meta_dir/cfg/scratch/obj
-	    if [ -n "$extra_cfgs" ]; then
-		for c in $extra_cfgs; do
-		    b=`basename $c`
-		    cp $c .
-		    echo "kconf required $b" >> auto_feat.scc
-		done
-	    
-		extra_features="$extra_features auto_feat.scc"
-	    fi
-
-	    if [ -n "$extra_patches" ]; then
-		for c in $extra_patches; do
-		    b=`basename $c`
-		    cp $c .
-		    echo "patch $b" >> auto_feat.scc
-		done
-	    
-		echo "$extra_features" | grep -q auto_feat.scc
-		if [ $? -ne 0 ]; then
-		    extra_features="$extra_features auto_feat.scc"
-		fi
-	    fi
 
 	    scc -o $ktgt $includes $top_tgt $extra_features $addon_features
-
 	    if [ -e "$ktgt" ]; then
 		bash ./$ktgt > ../$ktgt-meta
 	    else
@@ -409,20 +443,6 @@ do_update() {
 	    fi
 	)
 }
-
-process_args()
-{
-	args=$@
-
-	for a in $args; do
-		if [ -d $a ]; then
-			feature_dirs="$feature_dirs $a"
-		else
-			features_to_find="$features_to_find $a"	
-		fi
-	done
-}
-
 
 _strip_ext()
 {
@@ -482,14 +502,7 @@ linux_src_dir=`pwd`
 
 do_compile_prep $linux_src_dir
 
-# sorts the command line options and returns "feature_dirs" and 
-# "features_to_find"
-process_args $command_line_dirs
-
-find_features $feature_dirs
-find_configs $feature_dirs
-find_patches $feature_dirs
-
+split_command_line_objects $patches_cfgs_sccs
 do_addon_features $cmd_line_features $features_to_find
 
 do_update $CURRENT $linux_src_dir

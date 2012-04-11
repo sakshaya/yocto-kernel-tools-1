@@ -43,7 +43,7 @@ usage()
 {
 cat << EOF
 
-    configme [--audit] [--allnoconfig] [--reconfig] [--o <outdir>] [target] [machine]
+    configme [--audit] [--alldefconfig] [--allnoconfig] [--reconfig] [--o <outdir>] [target] [machine]
 
         audit: do an audit of final .config file
         reconfig: reconfigure an existing build
@@ -225,6 +225,9 @@ while [ $# -gt 0 ]; do
 		;;
 	    --allnoconfig)
 		allnoconfig=-n
+		;;
+	    --alldefconfig)
+		allnoconfig=""
 		;;
 	    --output|-o|--o)
 		out_dir=$2
