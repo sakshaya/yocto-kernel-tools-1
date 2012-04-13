@@ -193,7 +193,7 @@ migrate_cfg() {
 	fi
 
 	if [ -n "$verbose" ]; then
-		echo "migrating cfg: $c to $meta_dir/cfg/scratch/obj/$dirname"
+		echo "migrating cfg: `basename $c` to $meta_dir/cfg/scratch/obj/$dirname"
 	fi
 	cp -r $dirname/* $meta_dir/cfg/scratch/obj/$dirname
 
@@ -235,7 +235,7 @@ migrate_patch() {
 	fi
 
 	if [ -n "$verbose" ]; then
-		echo "migrating patch: $p to $meta_dir/cfg/scratch/obj/$dirname"
+		echo "migrating patch: `basename $p` to $meta_dir/cfg/scratch/obj/$dirname"
 	fi
 	cp -r $dirname/* $meta_dir/cfg/scratch/obj/$dirname
 
@@ -277,7 +277,7 @@ migrate_feature() {
 	fi
 
 	if [ -n "$verbose" ]; then
-		echo "migrating feature: $feat to $meta_dir/cfg/scratch/obj/$dirname"
+		echo "migrating feature: `basename $feat` to $meta_dir/cfg/scratch/obj/$dirname"
 	fi
 	cp -r $dirname/* $meta_dir/cfg/scratch/obj/$dirname
 
