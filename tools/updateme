@@ -63,7 +63,7 @@ while [ $# -gt 0 ]; do
 		cmd_line_branch="$2"
 		shift
 		;;
-            # depreciated. do not use
+            # deprecated. do not use
 	    --features)
 		cmd_line_features="$2"
 		shift
@@ -199,7 +199,7 @@ migrate_cfg() {
 	scc_files=`find $meta_dir/cfg/scratch/obj/$dirname -maxdepth 1 -type f -name *.scc`
 	b=`basename $c`
 
-	# check to see if a .scc file already includes the fragement
+	# check to see if a .scc file already includes the fragment
 	gen_feature=
 	if [ -n "$scc_files" ]; then
 		grep $b $scc_files -q

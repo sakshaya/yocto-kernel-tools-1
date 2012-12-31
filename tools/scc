@@ -395,7 +395,7 @@ _dump()
 }
 
 ## used in the feature scripts
-## depreciated: use "define KERNEL_VERSION <value>"
+## deprecated: use "define KERNEL_VERSION <value>"
 set_kernel_version()
 {
     KERNEL_VERSION=$1
@@ -406,7 +406,7 @@ set_kernel_version()
 ## return: 0 board is present
 ##         1 board is not present
 ##
-## Note: this is depreciated. if [ "$KMACHINE" ] should be used
+## Note: this is deprecated. if [ "$KMACHINE" ] should be used
 ##       instead
 check_board()
 {
@@ -1515,7 +1515,7 @@ compile_files()
 		    # generate the list of files that need to be compiled. 
 		    # We do that by looking for any commands in a given file
 		    # that can trigger another file to be build. Which currently
-		    # is only 'include' (scc_leaf is depreciated)
+		    # is only 'include' (scc_leaf is deprecated)
 		    z=
 		    for q in `cat $s | grep -E '^[[:space:]]*include' | awk '{print $2}'` ; do
 			 z=`echo $z $q`
