@@ -462,6 +462,10 @@ do_addon_features()
 	for f in $feats; do
 	        found_feat=
 		for d in $search_dirs; do
+			if [ -n "$found_feat" ]; then
+				continue
+			fi
+
 		        search_feat=`_strip_ext $f .scc`
 			potential=`find $d | grep -E ".*$search_feat\.scc"`
 			if [ -n "$potential" ]; then

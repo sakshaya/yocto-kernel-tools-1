@@ -433,7 +433,26 @@ override()
 # arg1: feature name to exclude
 exclude_feature()
 {
+    fname=$1
+
     excluded_features=`echo "$excluded_features"; echo "$fname"`
+}
+
+# prevent a cfg include, or if a feature name is passed, prevent the
+# feature from including any config values
+exclude_cfg()
+{
+    fname=$1
+    flags=$2
+
+    if [ "$flags" = "inhibit" ]; then
+	# clear the global flag
+	exclude_cfg_flag=
+	# remove ourself from the excluded cfgs
+	excluded_cfgs=`echo "$excluded_cfgs" | sed 's%$fname%%'`
+    else
+	excluded_cfgs=`echo "$excluded_cfgs"; echo "$fname"`
+    fi
 }
 
 # 0: feature is ok
@@ -453,7 +472,52 @@ check_excluded_feature()
                 excluded_features=$(echo "$excluded_features" | grep -v -E "^$my_pick$")
                 return 1
             fi
-        fi;
+        fi
+    fi
+
+    return 0
+}
+
+# 0: feature is ok
+# 1: feature should be excluded
+check_excluded_cfg()
+{
+    frag=$1
+    my_pick=""
+
+    if [ -n "$frag" ]; then
+	if [ -n "$excluded_cfgs" ]; then
+	    echo $frag | grep -q -E "\.cfg$"
+	    if [ $? -eq 0 ]; then
+		# if it's a fragment, only include this one, not all ..
+		single_cfg_only=t
+	    fi
+
+            tgts=$(echo "$excluded_cfgs" | grep -E "^$frag$")
+            # pick the first ...
+            my_pick=$(echo "$tgts" | head -n1)
+            if [ -n "$my_pick" ]; then
+	        # take it out of the pool.
+                excluded_cfgs=$(echo "$excluded_cfgs" | grep -v -E "^$my_pick$")
+
+		# as long as this is enabled, no configuration fragments will be processed
+		if [ -z "$single_cfg_only" ]; then
+		    exclude_cfg_flag=t
+		fi
+
+                return 1
+            fi
+	fi
+    else
+	# fragment is empty, but is the whole feature inhibited ?
+	if [ -n "$current_feature" ]; then
+	    echo $nocfg_features | grep -q -w "$current_feature_dir/$current_feature.scc"
+	    if [ $? -eq 0 ]; then
+		exclude_cfg_flag=t
+	    fi
+	fi
+	
+	return 1
     fi
 
     return 0
@@ -471,19 +535,48 @@ get_dir()
     echo $current_patch_dir
 }
 
+# used in feature scripts, "force" has a different meaning depending
+# on the wrapped command
+force()
+{
+    case $1 in
+	kconf)
+	    eval $@ force
+	    ;;
+	*)
+            eval $@ 
+	    ;;
+    esac
+}
+
 # used in feature scripts
 #  - associates a kernel config frag with the feature
 kconf()
 {
     type=$1
-    this_frag=$current_feature_dir/$2
+    frag=$2
+    flags=$3
 
-    if [ ! -f "$this_frag" ]; then
-	this_frag=`search_include_paths $2`
+    this_frag=$current_feature_dir/$frag
+ 
+    # are features being excluded ?
+    if [ -n "$exclude_cfg_flag" ] && [ "$flags" != "force" ]; then
+	return
+    fi
+    # is just this .cfg being excluded ?
+    if [ "$flags" != "force" ]; then
+	check_excluded_cfg $frag
+	if [ $? -eq 1 ]; then
+	    return
+	fi
     fi
 
     if [ ! -f "$this_frag" ]; then
-	echo "[ERROR] kernel configuration fragment fragment '$2' cannot be found"
+	this_frag=`search_include_paths $frag`
+    fi
+
+    if [ ! -f "$this_frag" ]; then
+	echo "[ERROR] kernel configuration fragment fragment '$frag' cannot be found"
 	exit 1
     fi
 
@@ -794,6 +887,23 @@ add_feature_to_process()
     to_process="$to_process $1"
 }
 
+add_feature_modifer()
+{
+    feature=$1
+    modifier=$2
+    flags=$3
+
+    case $modifier in
+	nocfg) 
+	    nocfg_features="$nocfg_features $feature"
+	    if [ "$flags" = "inherit" ]; then
+		nocfg_flags="$nocfg_flags do_not_clear"
+	    fi
+	    ;;
+	*) ;;
+    esac
+}
+
 # used by feature scripts. call this to set a variable
 # in the preamble of a created executable. subscripts
 # can use these values to make decisions
@@ -821,16 +931,27 @@ define()
 include()
 {
     fname=$1
-    before_after=$2
+    modifier=$2
     tgt_feat=$3
+
+    # if the feature name is actually "nocfg", then flip the modifier and
+    # feature name. We do these to allow "include nocfg foo.scc", instead
+    # of: include foo.scc nocfg. We can have a better syntax, and keep
+    # compatibility with old include directives
+    if [ "$fname" = "nocfg" ]; then
+	modifier=$1
+	fname=$2
+    fi
 
     fname=$(_strip_ext "$fname" ".$feature_ext")
 
     if [ -n "$fname" ]; then
+	check_excluded_cfg $fname
         # has this feature been explictly blocked?, if 
+
         check_excluded_feature $fname
         if [ $? -eq 0 ]; then
-            if [ -n "$before_after" ]; then
+            if [  "$modifier" = "after" ]; then
                 # a before or after trigger was passed
                 conditional_after_list=$(echo "$conditional_after_list"; 
                                          echo "$fname $tgt_feat")
@@ -862,6 +983,10 @@ include()
 		    fi
 		fi
 		path_sum=`echo $full_path | md5sum | cut -d' ' -f1`
+
+		if [  "$modifier" = "nocfg" ]; then
+		    add_feature_modifer $full_path $modifier $tgt_feat
+		fi
 
 		# the function we'd call should not have '.' in it, since
 		# shell won't allow this
@@ -904,10 +1029,28 @@ include()
 
 exclude()
 {
-    fname=`_strip_ext "$1" ".$feature_ext"`
+    kconf_only=$1
+    in_name=$2
 
-    ## a global feature exclude
-    exclude_feature $fname
+    # if "kconf" was not passed as argument #1, then we need
+    # to make the feture/exclude name be the first argument
+    if [ -z "$2" ]; then
+	in_name=$1
+    fi
+
+    echo "excluding $in_name .. cfg only: $kconf_only"
+
+    fname=`_strip_ext "$in_name" ".$feature_ext"`
+
+    echo $in_name | grep -q -E "\.cfg$"
+    if [ $? -eq 0 ]; then
+	exclude_cfg $in_name
+    elif [ "$kconf_only" = "kconf" ]; then
+	exclude_cfg $in_name
+    else
+        ## a global feature exclude
+	exclude_feature $fname
+    fi
 }
 
 # patch triggers are no longer supported. In a git context, they need
@@ -1006,9 +1149,30 @@ do_transform()
 }
 
 # arg1: short name of the active feature
+# arg2: long name of the active feature
 set_current_feature()
 {
-    current_feature=$1;
+    short_feature_name=$1
+    abs_feature_name=$2
+
+    # if we aren't processing an input file, it's config may be inhibited
+    echo "$in_files" | grep -q $abs_feature_name
+    if [ $? -ne 0 ]; then
+        # clear the cfg exclusion flag
+	if [ -n "$nocfg_flags" ]; then
+	    echo $nocfg_flags | grep -q -w "do_not_clear"
+	    if [ $? -ne 0 ]; then
+		exclude_cfg_flag=
+	    fi
+	else
+	    exclude_cfg_flag=
+	fi
+    else
+	exclude_cfg_flag=
+    fi
+
+    # set the feature name
+    current_feature=$short_feature_name
 } 
 
 # arg1: feature file to process
@@ -1050,9 +1214,11 @@ process_feature()
 	_dump "   _cmds=\$(echo \"\$_cmds\"; echo \"# _mark $small_feat start\")"
 
 	if [ -n "$pfeat" ]; then
-	    current_feature_dir=$(dirname $pfeat);
+	    current_feature_dir=$(dirname $pfeat)
 
-	    dir $current_feature_dir;
+	    dir $current_feature_dir
+	    # check to see if kernel configs should be inhibited
+	    check_excluded_cfg
 	    . $pfeat;
 	    if [ $? -ne 0 ]; then
 		echo " feature file $pfeat contains an error ... aborting";
@@ -1324,6 +1490,9 @@ compile_files()
 	    f=`search_include_paths $f`
 	fi
 
+	if [ -z "$f" ]; then
+	    continue
+	fi
 	f=`readlink -f $f`
 
 	# this ensures that everything on the original $in_files
@@ -1429,7 +1598,7 @@ compile_files()
 	to_process=""
 
         # output has been redirected to $patch_script
-	set_current_feature "$_basename"
+	set_current_feature "$_basename" "$absfile"
 	process_feature "$absfile" "$_basename"
 
 	if [ -n "$to_process" ]; then
