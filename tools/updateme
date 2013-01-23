@@ -145,7 +145,7 @@ gen_dirs() {
 	potential=`find $top_dir -maxdepth 3 -type d -name kernel*cache`
 	for dir in $potential; do
 	    search_dirs="$search_dirs $dir"
-	    includes="$includes -I $dir"
+	    includes="-I $dir $includes"
 	done
 }
 
