@@ -495,6 +495,19 @@ kconf()
     fi
 }
 
+# Used in feature scripts
+#  - convenience wrapper for "git merge" 
+#  - arguments are git merge <args> and are passed directly to git
+merge()
+{
+    args="$@"
+
+    # call the git wrapper function. Currently with no modification or
+    # checking on the args, but the option of checking in the future is
+    # trivial once users have converted.
+    git merge $args
+}
+
 # used in feature scripts
 #  - encodes a generic git command
 git()
