@@ -101,7 +101,8 @@ find $LINUX_SRC \
 	-o -path $LINUX_SRC/.git -prune				        \
 	-o -path $LINUX_SRC/$QUILT_PC_PAT -prune			\
 	-o -type f -a -name 'Kconfig*' -print |				\
-	sort | sed 's=^'$LINUX_SRC'==' > $KCONF_DIR/all.kcf
+	sort | sed 's=^'$LINUX_SRC'==' |                                \
+	sed 's%^/%%' > $KCONF_DIR/all.kcf
 	
 
 ##########################################################################
