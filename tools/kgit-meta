@@ -2,7 +2,7 @@
 
 #  (kgit-meta), (processes a meta-series to construct a git tree)
 
-#  Copyright (c) 2008-2011 Wind River Systems, Inc.
+#  Copyright (c) 2008-2013 Wind River Systems, Inc.
 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
@@ -777,7 +777,7 @@ do_patch()
                       if [ -f links ]; then
 			  rm -f links
 		      fi 
-		      ln -s $relative_dir/meta/cfg links)
+		      ln -s $relative_dir/$meta_dir/cfg links)
 		fi
 
 		if [ ! -d $patches_dir/$patches_links_dirname ]; then
