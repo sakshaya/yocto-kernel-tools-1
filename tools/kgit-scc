@@ -124,15 +124,20 @@ search_includes()
 find_feature_descriptions()
 {
     flist=$@
-    out_list=
+    out_list=""
 
     for feat in $flist; do
 	# exact matches in the search directories for the passed
 	# list of features
-	out_list="$out_list `search_includes \".*/$feat\" any`"
+	f=`search_includes ".*/$feat" any`
+	if [ -n "$out_list" ]; then
+	    out_list=`echo "$out_list"; echo "$f"`
+	else
+	    out_list=`echo "$f"`
+	fi
     done
 
-    echo $out_list
+    echo "$out_list"
 }
 
 get_feat_list()
@@ -283,7 +288,7 @@ if [ -n "$2" ]; then
     full_build=t
 fi
 top_meta_dir=meta
-meta_dir=meta/cfg/meta
+meta_dir=meta/cfg/scratch
 exec_dir=$meta_dir/obj
 
 if [ -n "$src" ]; then
@@ -449,66 +454,7 @@ fi
 
 prep_feature_desc=`find_feature_descriptions $prep_features`
 
-# only compile if we are doing a common build
-if [ -z "$use_per_build_obj_dir" ]; then
-    if [ -n "$compile" ]; then
-	count=0
-	old_dir=`pwd`
-	for dir in $search_dirs; do
-	    if [ -d $dir ]; then
-		echo " phase # $phase_count) compiling $dir"
-		feat_list=`get_feat_list $dir`
-		jcount=0
-		for f in $prep_feature_desc $feat_list; do
-		    if [ -n "$use_per_build_obj_dir" ]; then
-			small_feat=`basename $f .scc`
-			grep -q -e ".*scc_leaf.*" -e ".*define.*KTYPE" $f
-			if [ $? -ne 0 ]; then
-			    continue
-			fi
-		    else
-			small_feat=
-		    fi
-
-		    echo "   $count) scc `basename $f`"
-                    (
-			cd $output/$exec_dir
-			if [ -n "$small_feat" ] && [ ! -d $small_feat ]; then
-			    mkdir $small_feat
-			    cd $small_feat
-			fi
-
- 			if [ -n "$use_per_build_obj_dir" ]; then
-                            # compile all files, all the time
- 			    scc $inc_dirs $repo_dir $f
- 			else
- 			    scc --noauto $inc_dirs $repo_dir $f
- 			fi
-                    ) &
-		    op=$!
- 		    bops="$bops $op"
-		    let jcount=$jcount+1
-		    
-		    if [ "$jcount" -ge "$jobs" ]; then
-			wait_for_jobs \
-			    "Waiting for $jcount compile jobs to complete ..." \
-			    $bops
-			bops=
-			jcount=0
-		    fi
-		    let count=$count+1
-		    
-		    cd $old_dir
-		done
-		wait_for_jobs \
-		    "Waiting for $jcount compile jobs to complete ..." $bops
-	    fi
-	    let phase_count=$phase_count+1
-	done
-    fi
-fi
-
-if [ -n "$link" ]; then
+if [ -n "$link" ] || [ -n "$compile" ]; then
     count=1
     executables=""
     old_dir=`pwd`
@@ -520,7 +466,7 @@ if [ -n "$link" ]; then
 	    echo " phase # $phase_count) linking $dir"
 
 	    feat_list=`get_feat_list $dir t`
-	    total=$(echo "$feat_list" | wc -l)
+	    total=$(echo "$feat_list" "$prep_feature_desc" | tr ' ' '\n' | wc -l)
 
 	    bops=
 	    jcount=0
@@ -529,7 +475,7 @@ if [ -n "$link" ]; then
 		    outname=`basename $f .scc`
 
 		    # this is where we put 'jcount' jobs into the background
-		    echo "   [$count/$total] scc -o $outname `basename $f`"
+		    echo "   [$count/$total] scc --force -o $outname-meta $repo_dir `basename $f`"
 		    (
 			if [ -n "$use_per_build_obj_dir" ]; then
                             if [ ! -d $output/$exec_dir/$outname ];then
@@ -541,11 +487,12 @@ if [ -n "$link" ]; then
 			fi
 
                         # the magic
-			if [ -n "$use_per_build_obj_dir" ]; then
-			    scc $inc_dirs $repo_dir -o $outname $f
-			else	       	
-			    scc $inc_dirs $repo_dir --noauto -o $outname $f
+			scc --force -o $outname-meta $inc_dirs $repo_dir $f
+			if [ $? -ne 0 ]; then
+			    echo "ERROR: could not generate $outname-meta"
+			    exit 1
 			fi
+			mv $outname-meta ../..
                     ) &
 		    op=$!
  		    bops="$bops $op"
@@ -574,54 +521,9 @@ if [ -n "$link" ]; then
     done
 fi
 
-if [ -n "$exec" ]; then
-    old_dir=`pwd`
-    bops=
-    if [ -n "$exec_dir" ]; then
-	echo " phase # $phase_count) running executables"
-	
-	count=0
-	cd $output/$exec_dir
-	jcount=0
-	for e in $executables; do
-
-	    # background the jobs
-	    echo "   $count) $e > $e""-meta"
-	    (
-		if [ -n "$use_per_build_obj_dir" ]; then
-		    sh ./$e/$e > ../"$e""-meta"
-		else
-		    sh ./$e > ../"$e""-meta"
-		fi
-            ) &
-	    op=$!
- 	    bops="$bops $op"
-	    let jcount=$jcount+1
-
-	    if [ "$jcount" -ge "$jobs" ]; then
-		wait_for_jobs \
-                    "Waiting for $jcount meta-gen jobs to complete ..." \
-                    $bops
-		bops=
-		jcount=0
-	    fi
-
-	    let count=$count+1
-	done
-
-	wait_for_jobs \
-            "Waiting for meta-gen jobs to complete ..." $bops
-
-	cd $old_dir
-
-	let phase_count=$phase_count+1
-    fi
-fi
-
 if [ -n "$apply" ]; then
     if [ -n "$full_build" ]; then
 	echo " phase # $phase_count) running meta series"
-
 
 	old=`pwd`
 	cd $output
