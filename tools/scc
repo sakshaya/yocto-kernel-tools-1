@@ -141,6 +141,9 @@ define()
     var=$1
     value="$2"
 
+    # make the variable real
+    eval $var="\"$value\""
+
     echo "# _define $var '$value'"
 }
 
