@@ -306,11 +306,11 @@ process_file()
 	    # if we have a "nocfg" or "nopatch" on the include directive,
 	    # then we need to set the variables so they'll be passed down to
 	    # the nested process call
-	    echo "$fline" | grep -q "nocfg"
+	    echo "$fline" | grep -q "[[:space:]]\+nocfg"
 	    if [ $? -eq 0 ]; then
 		inhibit_cfg=nocfg
 	    fi
-	    echo "$fline" | grep -q "nopatch"
+	    echo "$fline" | grep -q "[[:space:]]\+nopatch"
 	    if [ $? -eq 0 ]; then
 		inhibit_patch=nopatch
 	    fi
