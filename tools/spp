@@ -127,6 +127,7 @@ fi
 search_include_paths()
 {
     local tgt=$1
+    shift
     local includes="$@"
     local exclude_files=""
     local base
@@ -347,7 +348,7 @@ process_file()
 		echo "true `dirname $in`/$patch_name"
 	    else
 		if [ ! -f `dirname $in`/$patch_name ]; then
-		    local patch_name_new=`search_include_paths $patch_name`
+		    local patch_name_new=`search_include_paths $patch_name $include_paths`		    
 		    if [ ! -f "$patch_name_new" ]; then
 			err "ERROR: could not find patch $patch_name, included from $containing_file"
 			return 1
@@ -387,7 +388,7 @@ process_file()
 		echo "true `dirname $in`/$kconf_name"
 	    else
 		if [ ! -f `dirname $in`/$kconf_name ]; then
-		    local kconf_name_new=`search_include_paths $kconf_name`
+		    local kconf_name_new=`search_include_paths $kconf_name $include_paths`
 		    if [ ! -f "$kconf_name_new" ]; then
 			err "ERROR: could not find kconf $kconf_name, included from $containing_file"
 			return 1
@@ -425,12 +426,29 @@ else
 fi
 
 for f in $infiles; do
-    if [ -n "$outfile" ]; then
-	process_file $f $f >> $outfile
-    else
-	process_file $f $f
+    if [ -z "$fail" ]; then
+	if [ -n "$outfile" ]; then
+	    process_file $f $f >> $outfile
+	    ret=$?
+	    if [ $ret -eq 1 ]; then
+		fail=t
+	    fi
+	else
+	    process_file $f $f
+	    ret=$?
+	    if [ $ret -eq 1 ]; then
+		fail=t
+	    fi
+	fi
     fi
 done
+
+if [ -n "$fail" ]; then
+    if [ -z "$intermediate" ]; then
+	rm -f $outfile
+    fi
+    exit $ret
+fi
 
 stop_time=`date +"%s"`
 duration=`expr $stop_time - $start_time`
@@ -439,14 +457,6 @@ if [ -n "$outfile" ]; then
     footer $duration $infiles >> $outfile
 else
     footer $duration $infiles
-fi
-
-
-ret=$?
-if [ $ret -ne 0 ]; then
-    if [ -z "$intermediate" ]; then
-	rm -f $outfile
-    fi
 fi
 
 exit $ret
