@@ -423,7 +423,7 @@ do_update() {
 		fi
 	    )
 
-	    top_tgt=$meta_dir/cfg/scratch/obj/$ktgt.scc
+	    top_tgt=`abs_path $meta_dir/cfg/scratch/obj/$ktgt.scc`
 	fi
 	
 	# generate branch switch code
