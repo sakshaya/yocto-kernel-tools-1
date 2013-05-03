@@ -331,12 +331,12 @@ search_includes_for_defines()
 
 	max_score=0
 	sccs_that_define=`find $search_dirs -name '*.scc' \
-                                | xargs grep -l -e 'define.*' | sort | uniq`
+                                | xargs grep -l -e '^[[:space:]]*define.*' | sort | uniq`
 	for scc in $sccs_that_define; do
 		score=0
 		for tgt in $define_tgt1 $define_tgt2 $define_tgt3; do
 			if [ -n "$tgt" ]; then
-				f=`grep -l -e 'define.*'$tgt'$' $scc`
+				f=`grep -l -e '^[[:space:]]*define.*'$tgt'$' $scc`
 				if [ -n "$f" ]; then
 			    	    score=`expr $score + 1`
 				fi
@@ -475,7 +475,7 @@ do_addon_features()
 			fi
 
 		        search_feat=`_strip_ext $f .scc`
-			potential=`find $d | grep -E ".*$search_feat\.scc"`
+			potential=`find $d | grep -E ".*/$search_feat\.scc"`
 			if [ -n "$potential" ]; then
 				addon_features="$addon_features `abs_path $potential`"
 				found_feat="$potential"
