@@ -442,6 +442,7 @@ do_update() {
 	# this builds and applies the meta-series
 	( cd $meta_dir/cfg/scratch/obj
 	    scc --force -o ../$ktgt-meta $includes $top_tgt $extra_features $addon_features
+
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. A meta series could not be created for $top_tgt"
 	    fi
@@ -481,9 +482,10 @@ do_addon_features()
 				found_feat="$potential"
 			else
 				if [ -e "$d/$f" ]; then
-				        # if it is a directory, only pass the dir name.
+				        # if it is a directory, it is a shortcut for "<dirname>/<dirname>.scc"
 					if [ -d "$d/$f" ]; then
-						addon_features="$addon_features `abs_path $f`"
+					        base=`basename $f`
+						addon_features="$addon_features `abs_path $d/$f/$base.scc`"
 						found_feat="$f"
 					else
 						addon_features="$addon_features `abs_path $d/$f`"
