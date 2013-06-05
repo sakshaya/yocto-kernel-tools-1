@@ -163,6 +163,7 @@ if [ -n "$checkpointing" ]; then
 	git checkout --orphan $checkpoint_branch
         # stage the requested files/directories
 	git rm -rfq `ls | grep -v meta`
+	git rm -f .gitignore
     else
 	git checkout $checkpoint_branch
     fi
