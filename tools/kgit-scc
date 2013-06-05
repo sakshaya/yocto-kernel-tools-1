@@ -288,7 +288,7 @@ if [ -n "$2" ]; then
     full_build=t
 fi
 top_meta_dir=meta
-meta_dir=meta/cfg/scratch
+meta_dir=$top_meta_dir/cfg/scratch
 exec_dir=$meta_dir/obj
 
 if [ -n "$src" ]; then
@@ -600,11 +600,19 @@ if [ -n "$apply" ]; then
     if [ -z "$noclean" ]; then
         # we are allowed to tidy up ...
 	echo " phase # $phase_count) cleaning new object files"
-	cd $output/$exec_dir
-	if [ $? -eq 0 ]; then
-	    rm -rf *
-	    echo "scc object files are placed in this directory" > README
-	fi
+	(
+	    cd $output/$exec_dir
+	    if [ $? -eq 0 ]; then
+		rm -rf *
+		echo "scc object files are placed in this directory" > README
+	    fi
+	)
+	(
+	    cd $output/$meta_dir
+	    if [ $? -eq 0 ]; then
+		rm -rf *-meta
+	    fi
+	)
 	let phase_count=$phase_count+1
     fi
 fi
