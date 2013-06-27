@@ -231,7 +231,10 @@ migrate_cfg() {
 
 		# we've generated the feature, make sure it can be found
 		add_search_include_dir $meta_dir/cfg/scratch/obj/$dirname
-		extra_features="$extra_features `abs_path $meta_dir/cfg/scratch/obj/$dirname/$gen_feature_name`"
+		echo $extra_features | grep -q $gen_feature_name
+		if [ $? -ne 0 ]; then
+			extra_features="$extra_features `abs_path $meta_dir/cfg/scratch/obj/$dirname/$gen_feature_name`"
+		fi
 	fi
 }
 
@@ -273,7 +276,10 @@ migrate_patch() {
 
 		# we've generated the feature, make sure it can be found
 		add_search_include_dir $meta_dir/cfg/scratch/obj/$dirname
-		extra_features="$extra_features `abs_path $meta_dir/cfg/scratch/obj/$dirname/$gen_feature_name`"
+		echo $extra_features | grep -q $gen_feature_name
+		if [ $? -ne 0 ]; then
+			extra_features="$extra_features `abs_path $meta_dir/cfg/scratch/obj/$dirname/$gen_feature_name`"
+		fi
 	fi
 }
 
@@ -448,7 +454,6 @@ do_update() {
 	# this builds and applies the meta-series
 	( cd $meta_dir/cfg/scratch/obj
 	    scc --force -o ../$ktgt-meta $includes $top_tgt $extra_features $addon_features
-
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. A meta series could not be created for $top_tgt"
 	    fi
