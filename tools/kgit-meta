@@ -137,7 +137,11 @@ fraglist="config_frag.txt"
 if [ -z "$verbose" ]; then
     _redir="> /dev/null"
 else
-    _redir="> /dev/null"
+    if [ "$vlevel" -eq 2 ]; then
+	_redir=""
+    else
+	_redir="> /dev/null"	
+    fi
 fi
 
 _meta_series=$1
@@ -145,31 +149,6 @@ if [ -n "$_patch_apply" ] && [ ! -e "$_meta_series" ]; then
     echo "ERROR. meta series '$_meta_series' does not exist..."
     exit 1
 fi
-
-# arg1: delay between calls
-# arg2: function to call
-# arg3: max loop count
-background_op_wait()
-{
-    trap 'done=t' SIGTERM SIGUSR1 SIGINT EXIT
-
-    my_sleep=$1
-    my_func=$2
-    max=$3
-    count=0
-
-    # this will recv any signals that may already be pending
-    sleep 1;
-    while [ -z "$done" ] && [ $count -lt $max ]; do
-        eval $my_func
-        sleep $my_sleep
-	count=`expr $count + 1`
-    done
-
-    if [ $count -ge $max ]; then
-	echo "warning: background operation timed out"
-    fi
-}
 
 progress_increment()
 {
@@ -612,10 +591,6 @@ do_branch()
 	if [ "$vlevel" -eq 2 ]; then
 	    echo "      branch ===> $name"
 	fi
-	
-	if [ -n "$last_passed_patch" ]; then
-	    pcommit=`grep $last_passed_patch $status_file | cut -d: -f1`
-	fi
 
 	# branchpoint get's the last say about from where we branch
 	if [ -n "$branchpoint" ]; then
@@ -700,26 +675,12 @@ do_patch()
     if [ -n "$active_patching" ]; then
 	# cleanup the path a bit
 	name=`echo $name | sed 's%^\./%%g'`
-	if [ -n "$_continue" ]; then
-	    # check to make sure it really is unique
-	    check_for_tracked_patch $local_name $status_file
-	    if [ $? -eq 0 ]; then
-		push_patch=t
-	    fi
 
-	    if [ -e $series_file ]; then
-                grep -q $local_name $series_file
-		if [ $? -ne 0 ]; then
-	           # patch isn't already in the series. add it
-		    add_to_series=t
-		fi
-	    else
-		 touch $series_file
-		 add_to_series=t
-	    fi
-	else
-	    add_to_series=t
-	    push_patch=t
+	push_patch=t
+	add_to_series=t
+
+	if [ ! -e $series_file ]; then
+	    touch $series_file
 	fi
 
 	if [ -n "$_skip" ]; then
@@ -742,122 +703,59 @@ do_patch()
         # get it into the series file
 	sname=`echo links/$local_name | sed s'%//%/%'`
 
-	if [ -n "$add_to_series" ]; then
-            if [ ! -e "$series_file" ]; then
-	        echo "ERROR. No series file detected. An invalid or non-existent branch has been used."
-	        exit 1;
+	grep -q -E "$local_name$" $series_file
+	if [ $? -ne 0 ]; then
+	    echo $sname >> $series_file
+	    if [ -n "$meta_merged" ]; then
+		git update-index --assume-unchanged $series_file
             fi
-	    grep -q -E "$name$" $series_file
-	    if [ $? -ne 0 ]; then
-		echo $sname >> $series_file
-		if [ -n "$meta_merged" ]; then
-		    git update-index --assume-unchanged $series_file
-                fi
-	    fi
+	fi
 
-            # arrange for the patch to be locally available for application
-	    if [ -n "$name" ] && [ -e "$name" ]; then
-		patches_links_dirname=`dirname $sname`
+        # arrange for the patch to be locally available for application
+	if [ -n "$name" ] && [ -e "$name" ]; then
+	    patches_links_dirname=`dirname $sname`
 
-		# unify patches and config, this means that all .scc files
-		# and their patches will be linked under the same directory
-		# structure
-                relative_link_count=`echo $series_file | sed 's%^\./%%' | grep -o "/" | wc -l`
-		if [ "$relative_link_count" == "0" ]; then
-		    relative_dir="../../.."
-		else
-		    relative_dir=""
-		    for c in `seq $relative_link_count`; do
-			relative_dir="$relative_dir`echo -n ../`"
-		    done
-		fi
-
-		if [ -d $patches_dir ] && [ ! -d $patches_dir/links ]; then
-    		    $(cd $patches_dir; 
-                      if [ -f links ]; then
-			  rm -f links
-		      fi 
-		      ln -s $relative_dir/$meta_dir/cfg links)
-		fi
-
-		if [ ! -d $patches_dir/$patches_links_dirname ]; then
-		    mkdir -p $patches_dir/$patches_links_dirname
-		fi
-
-		if [ ! $name -ef $patches_dir/$sname ]; then
-		    ln -sf $name $patches_dir/$sname
-		fi
-		last_patch_to_push=$sname
-		track_patch $sname
+            # unify patches and config, this means that all .scc files
+	    # and their patches will be linked under the same directory
+	    # structure
+            relative_link_count=`echo $series_file | sed 's%^\./%%' | grep -o "/" | wc -l`
+	    if [ "$relative_link_count" == "0" ]; then
+		relative_dir="../../.."
 	    else
-		echo "           *  warning: $name not found, not linking"
+		relative_dir=""
+		for c in `seq $relative_link_count`; do
+		    relative_dir="$relative_dir`echo -n ../`"
+		done
 	    fi
-	else
+
+	    if [ -d $patches_dir ] && [ ! -d $patches_dir/links ]; then
+    		$(  cd $patches_dir; 
+                    if [ -f links ]; then
+			rm -f links
+		    fi 
+		    ln -s $relative_dir/$meta_dir/cfg links
+		)
+	    fi
+
+	    if [ ! -d $patches_dir/$patches_links_dirname ]; then
+		mkdir -p $patches_dir/$patches_links_dirname
+	    fi
+
+	    if [ ! $name -ef $patches_dir/$sname ]; then
+		ln -sf $name $patches_dir/$sname
+	    fi
+
 	    last_patch_to_push=$sname
-	fi
+	    track_patch $sname
 
-    else
-	if [ -n "$verbose" ]; then
-	    if [ "$vlevel" -eq 2 ]; then
-		echo "         skipping already applied `basename $name`"
-	    else
-		progress_increment
+            eval "kgit-s2q --gen --patches `dirname $series_file` -a $_redir"
+	    if [ $? -ne 0 ]; then
+		exit 1
 	    fi
-	fi
-    fi
-    last_passed_patch=`basename $name`
-}
-
-do_pending_patches()
-{
-    local sname=$last_patch_to_push
-
-    # if we didn't really push anything (i.e. skipped patches)
-    # then sname is empty ... hence this does nothing.
-    if [ -n "$sname" ]; then
-	if [ -n "$verbose" ]; then
-	    if [ "$vlevel" -eq 2 ]; then
-		echo "    * pushing `basename $sname`"
-	    fi
-	fi
-
-	# if we are verbose and at vlevel 1, we'll start
-	# a background progress monitor, otherwise, we'll
-	# skip it
-	if [ -n "$verbose" ] && [ $vlevel -eq 1 ]; then
-	    do_background_push=t
-	fi
-
-	if [ -n "$do_background_push" ]; then
-	    ( eval "GUILT_BASE=$meta_dir guilt-push $sname $_redir" ) &
-	    j=$!
-	    trap 'kill -SIGUSR1 $j 2> /dev/null' SIGTERM SIGUSR1 SIGINT EXIT
-
-	    ( background_op_wait 2 progress_update 500 ) &
-	    progress_pid=$!
-	    trap 'kill -SIGUSR1 $progress_pid 2> /dev/null' SIGTERM SIGUSR1 SIGINT EXIT
-
-            # wait for the push
-	    wait $j
-	    push_code=$?
-	
-	    # cleanup. probably already dead, but to be sure ...
-	    kill -SIGUSR1 $progress_pid 2> /dev/null
 	else
-	    eval "GUILT_BASE=$meta_dir guilt-push $sname $_redir"
-	    push_code=$?
-	fi	    
-
-	if [ $push_code -ne 0 ]; then
-	    echo "[ERROR] unable to complete push"
-	    echo "pending patches are:"
-	    GUILT_BASE=$meta_dir guilt unapplied
-	    exit 1
+	    echo "           *  warning: $name not found, not linking"
 	fi
     fi
-
-    last_patch_to_push=
-    _processing_patches=
 }
 
 do_git()
@@ -882,19 +780,15 @@ do_git()
 		 
 		 do_tag "$my_tag" "$my_tag"
 		 ;;
-             *) 
+	    branch)
+		# we have "branch <options>" in $@, shift "branch" off and pass it
+		# to our more intelligent do_branch
+		shift
+		do_branch $@
+		;;
+	    *) 
  		 if [ "$vlevel" -eq 2 ]; then
 		     echo "      * issuing: git $cmd"
-		 fi
-
-		 # if git_warn_only hasn't been set already, test to see if
-		 # we are creating a branch. If we are, set the default to be warn
-		 # only, since creating a branch multiple times is a common operation
-		 if [ -z "$git_warn_only" ]; then
-		     echo $cmd | grep -q branch
-		     if [ $? -eq 0 ]; then
-			 git_warn_only=t
-		     fi
 		 fi
 
 		 eval git $cmd
@@ -914,7 +808,6 @@ _git()
 {
     git_args=$@
 
-    do_pending_patches
     do_git $git_args
 }
 
@@ -973,8 +866,6 @@ _branch_begin()
 {
     args=$@
 
-    do_pending_patches 
-
     # do branch will let us know if the branch
     # already existed. 
     do_branch $args
@@ -1032,12 +923,6 @@ wrap_meta_series()
 
     # now run the series
     source $_series.wrap
-
-    # grab any left over patches
-    do_pending_patches
-    if [ $? -ne 0 ]; then
-	exit 1
-    fi
 
     _stop=`date +"%s"`
     _duration=`expr $_stop - $_start`

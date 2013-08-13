@@ -1,0 +1,441 @@
+#!/bin/bash
+#
+# kgit-s2q
+#
+# Manage a queue of patches described by a series
+#
+# Based on:
+#    - LTSI helper script to generate a git tree from the quilt LTSI tree
+#    - git quilt-import
+#    - guilt (helper routines)
+#
+# Copyright 2013 Bruce Ashfield
+#
+# Licensed under the GPLv2 only.
+#
+#
+
+usage()
+{
+cat <<EOF
+
+ kgit-s2q [--author <author name> ] [-n] [--patches <dir>] [-a]
+          [--current] [--series] [--gen] [-c <count>] [-v] [-h] -- [<last patch applied>]"
+
+    --series:  dump the series file and exit
+    --gen:     generate patch headers if missing
+    --author:  patch author to use if missing, in the format of: "First Last <foo@bar.com>"
+    --patches: directory containing the series file to use
+    --current: show top currently applied patch
+    -c:        number of commits to test when autoresuming
+    -a:        autoresume series after last sucessfully applied patch
+    -v:        verbose
+    -n:        dry run
+    -h:        help
+
+    --:        marks the end of options on the command line
+
+    <last patch applied>: patch to use as the starting point (if -a not passed)
+
+EOF
+}
+
+silent()
+{
+	"$@" >/dev/null 2>/dev/null
+}
+
+get_branch()
+{
+	silent git symbolic-ref HEAD || \
+		die "Working on a detached HEAD is unsupported."
+
+	git symbolic-ref HEAD | sed -e 's,^refs/heads/,,'
+}
+
+next_patch()
+{
+	COMMIT_START="$1"
+
+	# find the first "real" commit on the branch, i.e. not a merge commit, and not
+	# not a commit that came from a merge
+	TOP_COMMIT=`git rev-list -n 1 --no-merges --first-parent $COMMIT_START`
+	PARENT=`git show $TOP_COMMIT|grep ommit|grep 'pstream\|herry\|tip'|sed 's/.* \([0-9a-f]\+\).*/\1/'`
+
+	CLEN=`echo $PARENT|wc -c`
+	if [ $CLEN -ne 41 ]; then
+
+		if [ -n "$VERBOSE" ]; then
+			echo "[INFO] No annotated resume point (parent ID) falling back to patch id detection"
+		fi
+
+		DS1=`mktemp`
+		DS2=`mktemp`
+		DS3=`mktemp`
+		DS4=`mktemp`
+		# get the git patch-id of the top commit
+		git show $TOP_COMMIT | git patch-id | cut -f1 -d' ' > $DS1
+
+		# and subject
+		git show $TOP_COMMIT --pretty=format:%s | head -1 > $DS4
+
+		# find the patch in the series that matches it
+		for i in `tac $DIR/series`; do
+			git patch-id < $DIR/$i | cut -f1 -d' ' > $DS2
+			cmp -s $DS1 $DS2
+			if [ $? = 0 ]; then
+				START=$i
+				break
+			fi
+		done
+
+		# return if we found a match
+		if [ -n "$START" ]; then
+			if [ -n "$VERBOSE" ]; then
+				echo "[INFO] Matched autoresume via patch ID detection"
+			fi
+			rm -f $DS1 $DS2 $DS3 $DS4
+			return
+		fi
+
+		if [ -n "$VERBOSE" ]; then
+			echo "[INFO] Could not autodetect resume point via patch ID falling back to diffstat detection"
+		fi
+
+		for i in `tac $DIR/series`; do
+			cat $DIR/$i | git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' > $DS3
+			cmp -s $DS3 $DS4
+			if [ $? -eq 0 ]; then
+				if [ -n "$VERBOSE" ]; then
+					echo "[INFO] Found subject match in $i."
+				fi
+				MAYBE_START=$i
+				break
+			fi
+		done
+
+		# diffstats
+		git show $TOP_COMMIT | diffstat -p0 > $DS1
+		for i in `tac $DIR/series`; do
+			cat $DIR/$i | diffstat -p0 > $DS2
+			cmp -s $DS1 $DS2
+			if [ $? = 0 ]; then
+				# as a second level check, ensure that if diffstats match, subjects
+				# should match as well. saves a lot of false positives.
+				if [ $i = "$MAYBE_START" ]; then
+					START=$i
+					if [ -n "$VERBOSE" ]; then
+						echo "[INFO] Matched autoresume via diffstat and subject detection" 
+					fi
+					rm $DS1 $DS2 $DS3 $DS4
+					return
+				fi
+			elif [ $i = "$MAYBE_START" ]; then
+					START=$i
+					if [ -n "$VERBOSE" ]; then
+						echo "[WARNING] Subject matched, but diffstat did not. Continuing anyway."
+					fi
+					rm -f $DS1 $DS2 $DS3 $DS4
+					return
+			fi
+		done
+
+		# if we are here, it means that we couldn't match the top commit to a patch
+		# in the series. The search can continue deeper into history, or we can flip
+		# the search. Let's take the last entry in the series, and see if its patch-id
+		# is on the branch.
+		for i in `tac $DIR/series | head -n1`; do
+			# grab the patch ID
+			cat $DIR/$i | git patch-id | cut -f1 -d' ' > $DS1
+
+			# get the base commit of the branch
+			merge_base=`git merge-base HEAD master`
+			# dump all of the real commits on the branch from the head commit to the merge base
+			# get their patch IDs
+			git rev-list --no-merges --first-parent $merge_base..HEAD | xargs git show | git patch-id  | cut -f1 -d' ' > $DS2
+		    
+			# if our patch ID is in that list, then the series is completely in
+			# the branch and is out of sync. Considering warning.
+			grep -q -f $DS1 $DS2
+			if [ $? -eq 0 ]; then
+				START=$i
+				if [ -n "$VERBOSE" ]; then
+					echo "[NOTE] series and branch are out of sync"
+					echo "[INFO] found the top of series in the branch, autoresuming"
+				fi
+			fi
+		done
+
+		if [ -z "$START" ]; then
+			if [ -n "$VERBOSE" ]; then
+				echo "[INFO] Could not autodetect resume point via diffstat"
+			fi
+		else
+			if [ -n "$VERBOSE" ]; then
+				echo "[INFO] Matched autoresume via diffstat detection"
+			fi
+		fi
+
+		rm $DS1 $DS2 $DS3 $DS4 $DS5
+
+		return
+	else
+		# searching via PARENT ID, which is an annotation found in the patch itself
+		if [ -z "$START" ]; then
+			for i in `tac $DIR/series`; do
+				if [ -z "$START" ]; then
+					START=`grep -l $PARENT $DIR/$i`
+				fi
+			done
+		fi
+
+		START=`echo $START|sed 's/^.*patches\./patches./'`
+	fi
+}
+
+quilt_author=""
+while test $# != 0
+do
+	case "$1" in
+	--author)
+		shift
+		quilt_author="$1"
+		;;
+	-n|--dry-run)
+		dry_run=1
+		;;
+	--patches)
+		shift
+		QUILT_PATCHES="$1"
+		;;
+	-c)     shift
+		DETECT_COUNT="$1"
+		;;
+	-a)
+		AUTORESUME=1
+		;;
+	-v)
+		VERBOSE=1
+		;;
+	--gen)
+		GENERATE_HEADER=1
+		;;
+	--series)
+		DUMP_SERIES=1
+		;;
+	--current)
+		DUMP_NEXT_PATCH=1
+		;;
+	--help|-h)
+		usage
+		exit
+		;;
+	--)
+		shift
+		break
+		;;
+	esac
+
+	shift
+done
+
+# we change directories ourselves
+SUBDIRECTORY_OK=1
+. "$(git --exec-path)/git-sh-setup"
+
+
+if [ -n "$1" ]; then
+	START=$1
+fi
+
+META=$KMETA
+if [ -z "$META" ]; then
+    META=meta
+fi
+BRANCH=`get_branch`
+
+# Quilt Author
+if [ -n "$quilt_author" ] ; then
+	quilt_author_name=$(expr "z$quilt_author" : 'z\(.*[^ ]\) *<.*') &&
+	quilt_author_email=$(expr "z$quilt_author" : '.*<\([^>]*\)') &&
+	test '' != "$quilt_author_name" &&
+	test '' != "$quilt_author_email" ||
+	die "malformed --author parameter"
+fi
+
+if [ -n "$QUILT_PATCHES" ]; then
+	DIR="$QUILT_PATCHES"
+else
+    	DIR="$META/patches/$BRANCH"
+	if [ ! -d "$DIR" ]; then
+		DIR=`dirname $0 |sed 's/scripts$//'`
+	fi
+fi
+
+SERIES=$DIR/series
+if [ ! -f "$SERIES" ]; then
+	echo ""
+	echo "[ERROR] Can't find series file at $SERIES"
+	usage
+	exit 1
+fi
+
+if [ -n "$DUMP_SERIES" ]; then
+	cat $SERIES
+	exit 0
+fi
+
+if [ -n "$DUMP_NEXT_PATCH" ]; then
+	next_patch HEAD
+
+	if [ -z "$START" ] && [ -n "$DETECT_COUNT" ]; then
+		count=0
+		commit_string="HEAD"
+		while [ -z $START ] && [ $count -lt $DETECT_COUNT ]; do
+			commit_string=`echo -n $commit_string^`
+			count=`expr $count + 1`
+
+			next_patch "$commit_string"
+		done
+	fi
+
+	if [ -z "$START" ]; then
+		echo "All patches applied"
+	else
+		echo "$START"
+	fi
+
+	exit 0
+fi
+
+diffstat --help > /dev/null 2>&1
+if [ $? != 0 ]; then
+	echo It appears you dont have diffstat installed.
+	echo Please install it.
+	exit 1
+fi
+
+if [ -n "$AUTORESUME" ] && [ -z "$START" ]; then
+
+	next_patch HEAD
+
+	if [ -z "$START" ] && [ -n "$DETECT_COUNT" ]; then
+		count=0
+		commit_string="HEAD"
+		while [ -z $START ] && [ $count -lt $DETECT_COUNT ]; do
+			commit_string=`echo -n $commit_string^`
+			count=`expr $count + 1`
+
+			if [ -n "$VERBOSE" ]; then
+				echo "[INFO] detection failed, trying previous commit ($commit_string)"
+			fi
+
+			next_patch "$commit_string"
+		done
+	fi
+		
+
+	if [ -z "$START" ]; then
+		echo "[INFO] Could not autodetect resume point via annotation, patch ID, diffstat or matching filename."
+		echo "       Patch that created current HEAD commit $PARENT is unknown. Starting from the first patch."
+	else
+		echo "[INFO] Resuming from patch after \"$START\""
+	fi
+fi
+
+# Temporary directories
+tmp_dir="$GIT_DIR"/rebase-apply
+tmp_msg="$tmp_dir/msg"
+tmp_patch="$tmp_dir/patch"
+tmp_info="$tmp_dir/info"
+
+# Find the intial commit
+commit=$(git rev-parse HEAD)
+
+COUNT=`cat $SERIES | grep '^[a-zA-Z0-9_]'|wc -l`
+APPLIED=0
+
+for i in `cat $SERIES | grep '^[a-zA-Z0-9_]'`
+do
+	APPLIED=$[$APPLIED+1]
+
+	if [ -n "$START" ]; then
+		if [ "$START" != "$i" ];then
+			continue
+		else
+			START=""
+			continue
+		fi
+	fi
+
+	if [ ! -f "$DIR/$i" ];then
+		echo $DIR/$i doesnt exist
+		break
+	fi
+
+	echo -n "($APPLIED/$COUNT) "
+
+	if [ -n "$GENERATE_HEADER" ]; then
+		if [ ! -d "$tmp_dir" ]; then
+			mkdir $tmp_dir || exit 2
+		fi
+
+		git mailinfo "$tmp_msg" "$tmp_patch" \
+		    <"$DIR/$i" >"$tmp_info" || exit 3
+		test -s "$tmp_patch" || {
+			echo "Patch is empty.  Was it split wrong?"
+			exit 1
+		}
+
+		#  Parse the author information
+		GIT_AUTHOR_NAME=$(sed -ne 's/Author: //p' "$tmp_info")
+		GIT_AUTHOR_EMAIL=$(sed -ne 's/Email: //p' "$tmp_info")
+		export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL
+		while test -z "$GIT_AUTHOR_EMAIL" && test -z "$GIT_AUTHOR_NAME" ; do
+			if [ -n "$quilt_author" ] ; then
+				GIT_AUTHOR_NAME="$quilt_author_name";
+				GIT_AUTHOR_EMAIL="$quilt_author_email";
+			elif [ -n "$dry_run" ]; then
+				echo "No author found in $patch_name" >&2;
+				GIT_AUTHOR_NAME="dry-run-not-found";
+				GIT_AUTHOR_EMAIL="dry-run-not-found";
+			else
+				echo "No author found in $patch_name" >&2;
+				echo "---"
+				cat $tmp_msg
+				printf "Author: ";
+				read patch_author
+
+				echo "$patch_author"
+
+				patch_author_name=$(expr "z$patch_author" : 'z\(.*[^ ]\) *<.*') &&
+				patch_author_email=$(expr "z$patch_author" : '.*<\([^>]*\)') &&
+				test '' != "$patch_author_name" &&
+				test '' != "$patch_author_email" &&
+				GIT_AUTHOR_NAME="$patch_author_name" &&
+				GIT_AUTHOR_EMAIL="$patch_author_email"
+			fi
+		done
+		GIT_AUTHOR_DATE=$(sed -ne 's/Date: //p' "$tmp_info")
+		SUBJECT=$(sed -ne 's/Subject: //p' "$tmp_info")
+		export GIT_AUTHOR_DATE SUBJECT
+		if [ -z "$SUBJECT" ] ; then
+			SUBJECT=$(echo $patch_name | sed -e 's/.patch$//')
+		fi
+
+		if [ -z "$dry_run" ] ; then
+			echo "Applying: $SUBJECT"
+
+			git apply --index -C1 ${level:+"$level"} "$tmp_patch" &&
+			tree=$(git write-tree) &&
+			commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
+			git update-ref -m "quiltimport: $patch_name" HEAD $commit || exit 4
+		fi
+	else
+		git am $DIR/$i
+		if [ $? != 0 ];then
+			echo "git am of $i failed. Patch needs to be refreshed"
+			exit 1
+		fi
+	fi
+done
