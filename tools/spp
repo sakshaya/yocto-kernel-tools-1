@@ -290,6 +290,8 @@ process_file()
 '
     echo "# --> file: $in"
     echo "# flags: $flags"
+    echo "mark `basename $in` start"
+
     for fline in `cat $in`; do
 	done=""
 
@@ -410,6 +412,8 @@ process_file()
 	fi
     done
     IFS=$OLDIFS
+
+    echo "mark `basename $in` end"
     echo "# <-- done file: $in"
     echo "#"
 

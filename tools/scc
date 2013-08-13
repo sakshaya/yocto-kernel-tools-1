@@ -158,6 +158,18 @@ kconf()
     echo "# _kconf $type $frag"
 }
 
+mark()
+{
+    file=$1
+    start_or_end=$2
+
+    if [ "$start_or_end" = "start" ]; then
+	echo "   # _mark $file start"
+    else
+	echo "   # _mark $file end"	
+    fi
+}
+
 reloc_dir()
 {
     dir=$1
@@ -169,7 +181,6 @@ process_file()
 {
     local in=$1
     local containing_file=$2
-    local inherited_inhibit_cfg=$3
     local ret=0
     local done=""
 
