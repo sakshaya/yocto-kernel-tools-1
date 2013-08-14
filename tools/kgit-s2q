@@ -77,7 +77,8 @@ next_patch()
 		git show $TOP_COMMIT | git patch-id | cut -f1 -d' ' > $DS1
 
 		# and subject
-		git show $TOP_COMMIT --pretty=format:%s | head -1 > $DS4
+		git format-patch --stdout $TOP_COMMIT~..$TOP_COMMIT  | \
+			git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' > $DS4
 
 		# find the patch in the series that matches it
 		for i in `tac $DIR/series`; do
@@ -380,7 +381,7 @@ do
 			mkdir $tmp_dir || exit 2
 		fi
 
-		git mailinfo "$tmp_msg" "$tmp_patch" \
+		git mailinfo -b "$tmp_msg" "$tmp_patch" \
 		    <"$DIR/$i" >"$tmp_info" || exit 3
 		test -s "$tmp_patch" || {
 			echo "Patch is empty.  Was it split wrong?"
@@ -432,7 +433,7 @@ do
 			git update-ref -m "quiltimport: $patch_name" HEAD $commit || exit 4
 		fi
 	else
-		git am $DIR/$i
+		git am --keep-non-patch $DIR/$i
 		if [ $? != 0 ];then
 			echo "git am of $i failed. Patch needs to be refreshed"
 			exit 1
