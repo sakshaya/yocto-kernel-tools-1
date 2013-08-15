@@ -440,3 +440,12 @@ do
 		fi
 	fi
 done
+
+# if we've failed to locate $START in the series, and
+# not subsequently cleared $START, then something evil
+# has happened, and we'll do nothing and silently
+# return zero which otherwise would be nasty.
+if [ -n "$START" ]; then
+	echo Failed to locate $START in the series
+	exit 1
+fi
