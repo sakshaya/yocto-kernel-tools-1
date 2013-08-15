@@ -280,7 +280,9 @@ if [ ! -f "$SERIES" ]; then
 fi
 
 if [ -n "$DUMP_SERIES" ]; then
-	cat $SERIES
+	for i in `cat $SERIES`; do
+		echo $DIR/$i
+	done
 	exit 0
 fi
 
@@ -429,17 +431,25 @@ do
 		fi
 
 		if [ -z "$dry_run" ] ; then
-			echo "Applying: $SUBJECT"
+			if [ -n "$VERBOSE" ]; then
+				echo "Applying: $SUBJECT"
+			fi
 
 			git apply --index -C1 ${level:+"$level"} "$tmp_patch" &&
 			tree=$(git write-tree) &&
 			commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
-			git update-ref -m "quiltimport: $patch_name" HEAD $commit || exit 4
+			git update-ref -m "quiltimport: $patch_name" HEAD $commit
+			if [ $? != 0 ];then
+				echo "[ERROR]: Application of $DIR/$i failed."
+				echo "         Patch needs to be refreshed"
+				exit 1
+			fi
 		fi
 	else
 		git am --keep-non-patch $DIR/$i
 		if [ $? != 0 ];then
-			echo "git am of $i failed. Patch needs to be refreshed"
+			echo "[ERROR]: git am of $DIR/$i failed."
+			echo "	       Patch needs to be refreshed"
 			exit 1
 		fi
 	fi
