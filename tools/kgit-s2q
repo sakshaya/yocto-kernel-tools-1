@@ -128,7 +128,7 @@ next_patch()
 					if [ -n "$VERBOSE" ]; then
 						echo "[INFO] Matched autoresume via diffstat and subject detection" 
 					fi
-					rm $DS1 $DS2 $DS3 $DS4
+					rm -f $DS1 $DS2 $DS3 $DS4
 					return
 				fi
 			elif [ $i = "$MAYBE_START" ]; then
@@ -177,7 +177,7 @@ next_patch()
 			fi
 		fi
 
-		rm $DS1 $DS2 $DS3 $DS4 $DS5
+		rm -f $DS1 $DS2 $DS3 $DS4
 
 		return
 	else
