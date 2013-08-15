@@ -748,7 +748,7 @@ do_patch()
 	    last_patch_to_push=$sname
 	    track_patch $sname
 
-            eval "kgit-s2q --gen --patches `dirname $series_file` -a $_redir"
+            eval "KMETA=$meta_dir kgit-s2q --gen --patches `dirname $series_file` -- $sname"
 	    if [ $? -ne 0 ]; then
 		exit 1
 	    fi

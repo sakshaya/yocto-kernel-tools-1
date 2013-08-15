@@ -54,6 +54,8 @@ cat <<EOF
    --src      :  find all of the source files (.scc) matching the pattern
                  <input> in the passed include directories
    --prep:    : features that should be used to prep a repository build
+   --meta-dir <metadir>:  dir with meta content (default "meta")
+   --meta-branch <metabr>:  branch to store meta content (default "meta")
 
    -I <dirs>  : directories to search for .scc files
    -i <dirs>  : directories to serach for source repos
@@ -204,6 +206,14 @@ while [ $# -gt 0 ]; do
 		jobs=$2
 		shift
 		;;
+	--meta-dir)
+		top_meta_dir="$2"
+		shift
+		;;
+	--meta-branch)
+		meta_branch="$2"
+		shift
+		;;
 	--src)
 		src=t
 		;;
@@ -287,7 +297,12 @@ if [ -n "$2" ]; then
     output=$2
     full_build=t
 fi
-top_meta_dir=meta
+if [ -z "$top_meta_dir" ]; then
+	top_meta_dir=meta
+fi
+if [ -z "$meta_branch" ]; then
+	meta_branch=meta
+fi
 meta_dir=$top_meta_dir/cfg/scratch
 exec_dir=$meta_dir/obj
 
@@ -424,7 +439,7 @@ if [ -n "$init" ]; then
 		exit 1
 	    fi
 
-	    kgit-init -v $input $base_ver $output
+	    kgit-init --meta-dir $top_meta_dir --meta-branch $meta_branch -v $input $base_ver $output
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. Unable to clone source repository $input"
 		exit 1
@@ -570,7 +585,7 @@ if [ -n "$apply" ]; then
 	    if [ -n "$verbose" ]; then
 		echo "running: kgit-meta $vflags $extra --apply $meta_dir/$e-meta"
 	    fi
-	    kgit-meta $vflags $extra --apply $meta_dir/$e-meta
+	    KMETA=$meta_dir kgit-meta $vflags $extra --apply $meta_dir/$e-meta
 
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. Could not apply meta series $meta_dir/$e-meta"

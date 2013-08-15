@@ -92,6 +92,8 @@ cat <<EOF
        perform garbage collection and remove all existing 
        branches (under the assumption they'll be recreated)
    --reference <repo>: repo to use as the reference during clone
+   --meta-dir <metadir>:  dir with meta content (default "meta")
+   --meta-branch <metabr>:  branch to store meta content (default "meta")
 
    <src>        : The source repository.
    <base branch>: optional. indicates a base branch point in the
@@ -120,6 +122,14 @@ while [ $# -gt 0 ]; do
 		;;
 	-o|--o)
 		dest="$2"
+		shift
+		;;
+	--meta-dir)
+		meta_dir="$2"
+		shift
+		;;
+	--meta-branch)
+		meta_branch="$2"
 		shift
 		;;
 	--reference)
@@ -154,8 +164,12 @@ src=$1
 initial_branch_point=$2
 dest=$3
 
-meta_dir=meta
-meta_branch=meta
+if [ -z "$meta_dir" ]; then
+	meta_dir=meta
+fi
+if [ -z "$meta_branch" ]; then
+	meta_branch=meta
+fi
 content_branch=master
 
 # now fixup based on zero'd values
