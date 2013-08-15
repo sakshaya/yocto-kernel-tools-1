@@ -189,8 +189,6 @@ next_patch()
 				fi
 			done
 		fi
-
-		START=`echo $START|sed 's/^.*patches\./patches./'`
 	fi
 }
 
@@ -361,7 +359,13 @@ do
 	APPLIED=$[$APPLIED+1]
 
 	if [ -n "$START" ]; then
-		if [ "$START" != "$i" ];then
+		# we compare in the series:
+		# links/kernel-cache/ltsi/patches.dma-mapping/...
+		# to $START which will have:
+		# meta/patches/standard/base/links/kernel-cache/ltsi/patches.dma-mapping/...
+		# so grep for the series sub-path in $START
+		echo $START | grep -qF $i
+		if [ $? != 0 ]; then
 			continue
 		else
 			START=""
