@@ -490,7 +490,7 @@ branch_prep()
     if [ ! -e $meta_dir/patches/$branch_name/status ]; then
 	touch $meta_dir/patches/$branch_name/status
     fi
-    
+
     series_file=$meta_dir/patches/$branch_name/series
     if [ -s $meta_dir/patches/$branch_name/series ]; then
 	cat $meta_dir/patches/$branch_name/series | tr -s / > $meta_dir/patches/$branch_name/series.new
@@ -662,6 +662,25 @@ _strip_common_prefix()
     echo "$relocated_name"
 }
 
+do_pending_patches()
+{
+    if [ -n "$verbose" ]; then
+	flags="-v"
+    fi
+	
+    if [ -n "$last_patch_to_push" ]; then
+	patch_flags=" -- $last_patch_to_push"
+    else
+	patch_flags="-a"
+    fi
+
+    eval "KMETA=$meta_dir kgit-s2q $flags --gen --patches `dirname $series_file` $patch_flags $_redir"
+    if [ $? -ne 0 ]; then
+	exit 1
+    fi
+
+    last_patch_to_push=""
+}
 
 # conditionally push 
 do_patch()
@@ -671,13 +690,11 @@ do_patch()
 
     local_name=`_strip_common_prefix $name | tr -s /`
 
-    add_to_series=
     if [ -n "$active_patching" ]; then
 	# cleanup the path a bit
 	name=`echo $name | sed 's%^\./%%g'`
 
 	push_patch=t
-	add_to_series=t
 
 	if [ ! -e $series_file ]; then
 	    touch $series_file
@@ -692,6 +709,8 @@ do_patch()
     fi
 
     if [ -n "$push_patch" ]; then
+	added_to_series=
+
 	if [ -n "$verbose" ]; then
 	    if [ "$vlevel" -eq 2 ]; then
 		echo "         patch `basename $name` ($series_file)"
@@ -705,6 +724,7 @@ do_patch()
 
 	grep -q -E "$local_name$" $series_file
 	if [ $? -ne 0 ]; then
+	    added_to_series=t
 	    echo $sname >> $series_file
 	    if [ -n "$meta_merged" ]; then
 		git update-index --assume-unchanged $series_file
@@ -736,7 +756,6 @@ do_patch()
 		    ln -s $relative_dir/$meta_dir/cfg links
 		)
 	    fi
-
 	    if [ ! -d $patches_dir/$patches_links_dirname ]; then
 		mkdir -p $patches_dir/$patches_links_dirname
 	    fi
@@ -745,10 +764,12 @@ do_patch()
 		ln -sf $name $patches_dir/$sname
 	    fi
 
-	    last_patch_to_push=$sname
-	    track_patch $sname
+	    if [ -n "$added_to_series" ]; then
+		track_patch $sname
+	    # else
+	    # 	last_patch_to_push=$sname
+	    fi
 
-            eval "KMETA=$meta_dir kgit-s2q --gen --patches `dirname $series_file` -- $sname"
 	    if [ $? -ne 0 ]; then
 		exit 1
 	    fi
@@ -808,6 +829,7 @@ _git()
 {
     git_args=$@
 
+    do_pending_patches
     do_git $git_args
 }
 
@@ -817,6 +839,7 @@ _mark()
     a=$2
 
     if [ "$a" = "start" ]; then
+	do_pending_patches
 	if [ "$vlevel" -eq 2 ]; then
 	    echo "   mark --> $n"
 	fi
@@ -836,7 +859,6 @@ _patch()
 	fi
     fi
     if [ -z "$skip_to_end" ]; then
-	_processing_patches=t
 	do_patch $1
 	if [ $? -ne 0 ]; then
 	    exit 1
@@ -865,6 +887,8 @@ _define()
 _branch_begin()
 {
     args=$@
+
+    do_pending_patches
 
     # do branch will let us know if the branch
     # already existed. 
@@ -923,6 +947,9 @@ wrap_meta_series()
 
     # now run the series
     source $_series.wrap
+
+    # catch any remaining patches
+    do_pending_patches
 
     _stop=`date +"%s"`
     _duration=`expr $_stop - $_start`

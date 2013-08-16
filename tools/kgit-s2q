@@ -20,7 +20,7 @@ usage()
 cat <<EOF
 
  kgit-s2q [--author <author name> ] [-n] [--patches <dir>] [-a]
-          [--current] [--series] [--gen] [-c <count>] [-v] [-h] -- [<last patch applied>]"
+          [--current] [--series] [--gen] [-c <count>] [-v] [-h] -- [<patch>]"
 
     --series:  dump the series file and exit
     --gen:     generate patch headers if missing
@@ -35,7 +35,7 @@ cat <<EOF
 
     --:        marks the end of options on the command line
 
-    <last patch applied>: patch to use as the starting point (if -a not passed)
+    <patch>:   patch to use as the starting point (turns autoresume off)
 
 EOF
 }
@@ -85,13 +85,13 @@ next_patch()
 			git patch-id < $DIR/$i | cut -f1 -d' ' > $DS2
 			cmp -s $DS1 $DS2
 			if [ $? = 0 ]; then
-				START=$i
+				FENCE_POST=$i
 				break
 			fi
 		done
 
 		# return if we found a match
-		if [ -n "$START" ]; then
+		if [ -n "$FENCE_POST" ]; then
 			if [ -n "$VERBOSE" ]; then
 				echo "[INFO] Matched autoresume via patch ID detection"
 			fi
@@ -124,7 +124,7 @@ next_patch()
 				# as a second level check, ensure that if diffstats match, subjects
 				# should match as well. saves a lot of false positives.
 				if [ $i = "$MAYBE_START" ]; then
-					START=$i
+					FENCE_POST=$i
 					if [ -n "$VERBOSE" ]; then
 						echo "[INFO] Matched autoresume via diffstat and subject detection" 
 					fi
@@ -132,7 +132,7 @@ next_patch()
 					return
 				fi
 			elif [ $i = "$MAYBE_START" ]; then
-					START=$i
+					FENCE_POST=$i
 					if [ -n "$VERBOSE" ]; then
 						echo "[WARNING] Subject matched, but diffstat did not. Continuing anyway."
 					fi
@@ -159,7 +159,7 @@ next_patch()
 			# the branch and is out of sync. Considering warning.
 			grep -q -f $DS1 $DS2
 			if [ $? -eq 0 ]; then
-				START=$i
+				FENCE_POST=$i
 				if [ -n "$VERBOSE" ]; then
 					echo "[NOTE] series and branch are out of sync"
 					echo "[INFO] found the top of series in the branch, autoresuming"
@@ -167,7 +167,7 @@ next_patch()
 			fi
 		done
 
-		if [ -z "$START" ]; then
+		if [ -z "$FENCE_POST" ]; then
 			if [ -n "$VERBOSE" ]; then
 				echo "[INFO] Could not autodetect resume point via diffstat"
 			fi
@@ -182,10 +182,10 @@ next_patch()
 		return
 	else
 		# searching via PARENT ID, which is an annotation found in the patch itself
-		if [ -z "$START" ]; then
+		if [ -z "$FENCE_POST" ]; then
 			for i in `tac $DIR/series`; do
-				if [ -z "$START" ]; then
-					START=`grep -l $PARENT $DIR/$i`
+				if [ -z "$FENCE_POST" ]; then
+					FENCE_POST=`grep -l $PARENT $DIR/$i`
 				fi
 			done
 		fi
@@ -242,14 +242,19 @@ done
 SUBDIRECTORY_OK=1
 . "$(git --exec-path)/git-sh-setup"
 
-
+# if anything is left on the command line, it is a specified starting patch and
+# not a fence post
 if [ -n "$1" ]; then
 	START=$1
+	AUTORESUME=
 fi
 
 META=$KMETA
 if [ -z "$META" ]; then
-    META=meta
+	META=`ls -d meta* | head -1`
+	if [ -z "$META" ]; then
+		META=meta
+	fi
 fi
 BRANCH=`get_branch`
 
@@ -289,10 +294,10 @@ fi
 if [ -n "$DUMP_NEXT_PATCH" ]; then
 	next_patch HEAD
 
-	if [ -z "$START" ] && [ -n "$DETECT_COUNT" ]; then
+	if [ -z "$FENCE_POST" ] && [ -n "$DETECT_COUNT" ]; then
 		count=0
 		commit_string="HEAD"
-		while [ -z $START ] && [ $count -lt $DETECT_COUNT ]; do
+		while [ -z $FENCE_POST ] && [ $count -lt $DETECT_COUNT ]; do
 			commit_string=`echo -n $commit_string^`
 			count=`expr $count + 1`
 
@@ -300,10 +305,10 @@ if [ -n "$DUMP_NEXT_PATCH" ]; then
 		done
 	fi
 
-	if [ -z "$START" ]; then
+	if [ -z "$FENCE_POST" ]; then
 		echo "All patches applied"
 	else
-		echo "$START"
+		echo "$FENCE_POST"
 	fi
 
 	exit 0
@@ -316,14 +321,14 @@ if [ $? != 0 ]; then
 	exit 1
 fi
 
-if [ -n "$AUTORESUME" ] && [ -z "$START" ]; then
+if [ -n "$AUTORESUME" ] && [ -z "$FENCE_POST" ]; then
 
 	next_patch HEAD
 
-	if [ -z "$START" ] && [ -n "$DETECT_COUNT" ]; then
+	if [ -z "$FENCE_POST" ] && [ -n "$DETECT_COUNT" ]; then
 		count=0
 		commit_string="HEAD"
-		while [ -z $START ] && [ $count -lt $DETECT_COUNT ]; do
+		while [ -z $FENCE_POST ] && [ $count -lt $DETECT_COUNT ]; do
 			commit_string=`echo -n $commit_string^`
 			count=`expr $count + 1`
 
@@ -336,11 +341,11 @@ if [ -n "$AUTORESUME" ] && [ -z "$START" ]; then
 	fi
 		
 
-	if [ -z "$START" ]; then
+	if [ -z "$FENCE_POST" ]; then
 		echo "[INFO] Could not autodetect resume point via annotation, patch ID, diffstat or matching filename."
 		echo "       Patch that created current HEAD commit $PARENT is unknown. Starting from the first patch."
 	else
-		echo "[INFO] Resuming from patch after \"$START\""
+		echo "[INFO] Resuming from patch after \"$FENCE_POST\""
 	fi
 fi
 
@@ -350,37 +355,52 @@ tmp_msg="$tmp_dir/msg"
 tmp_patch="$tmp_dir/patch"
 tmp_info="$tmp_dir/info"
 
-# Find the intial commit
-commit=$(git rev-parse HEAD)
-
 COUNT=`cat $SERIES | grep '^[a-zA-Z0-9_]'|wc -l`
 APPLIED=0
+
+# Find the intial commit
+commit=$(git rev-parse HEAD)
 
 for i in `cat $SERIES | grep '^[a-zA-Z0-9_]'`
 do
 	APPLIED=$[$APPLIED+1]
 
 	if [ -n "$START" ]; then
-		# we compare in the series:
-		# links/kernel-cache/ltsi/patches.dma-mapping/...
-		# to $START which will have:
-		# meta/patches/standard/base/links/kernel-cache/ltsi/patches.dma-mapping/...
-		# so grep for the series sub-path in $START
 		echo $START | grep -qF $i
-		if [ $? != 0 ]; then
+		if [ $? -ne 0 ]; then
+			# if we don't match, skip to the next patch
 			continue
 		else
+			# if we do match, clear our variables so all future patches
+			# will be pushed.
 			START=""
-			continue
+			FENCE_POST=""
+		fi
+	else
+		if [ -n "$FENCE_POST" ]; then
+			# we compare in the series:
+			#     links/kernel-cache/ltsi/patches.dma-mapping/...
+			# to $FENCE_POST which will have:
+			#     meta/patches/standard/base/links/kernel-cache/ltsi/patches.dma-mapping/...
+			# so grep for the series sub-path in $FENCE_POST
+			echo $FENCE_POST | grep -qF $i
+			if [ $? != 0 ]; then
+				continue
+			else
+				FENCE_POST=""
+				continue
+			fi
 		fi
 	fi
 
 	if [ ! -f "$DIR/$i" ];then
-		echo $DIR/$i doesnt exist
-		break
+		echo "[ERROR]: patch $DIR/$i doesnt exist"
+		exit 1
 	fi
 
-	echo -n "($APPLIED/$COUNT) "
+	if [ -n "$VERBOSE" ]; then
+		echo -n "($APPLIED/$COUNT) "
+	fi
 
 	if [ -n "$GENERATE_HEADER" ]; then
 		if [ ! -d "$tmp_dir" ]; then
@@ -435,15 +455,15 @@ do
 				echo "Applying: $SUBJECT"
 			fi
 
-			git apply --index -C1 ${level:+"$level"} "$tmp_patch" &&
-			tree=$(git write-tree) &&
-			commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
-			git update-ref -m "quiltimport: $patch_name" HEAD $commit
+			git apply --index -C1 ${level:+"$level"} "$tmp_patch"
 			if [ $? != 0 ];then
 				echo "[ERROR]: Application of $DIR/$i failed."
 				echo "         Patch needs to be refreshed"
 				exit 1
 			fi
+			tree=$(git write-tree)
+			commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit)
+			git update-ref -m "kgit-s2q: $patch_name" HEAD $commit || exit 4
 		fi
 	else
 		git am --keep-non-patch $DIR/$i
@@ -455,11 +475,11 @@ do
 	fi
 done
 
-# if we've failed to locate $START in the series, and
-# not subsequently cleared $START, then something evil
+# if we've failed to locate $FENCE_POST in the series, and
+# not subsequently cleared $FENCE_POST, then something evil
 # has happened, and we'll do nothing and silently
 # return zero which otherwise would be nasty.
-if [ -n "$START" ]; then
-	echo Failed to locate $START in the series
+if [ -n "$FENCE_POST" ]; then
+	echo Failed to locate $FENCE_POST in the series
 	exit 1
 fi

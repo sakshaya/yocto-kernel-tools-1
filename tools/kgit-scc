@@ -583,9 +583,9 @@ if [ -n "$apply" ]; then
 		fi
             fi
 	    if [ -n "$verbose" ]; then
-		echo "running: kgit-meta $vflags $extra --apply $meta_dir/$e-meta"
+		echo "running: KMETA=$top_meta_dir kgit-meta $vflags $extra --apply $meta_dir/$e-meta"
 	    fi
-	    KMETA=$meta_dir kgit-meta $vflags $extra --apply $meta_dir/$e-meta
+	    KMETA=$top_meta_dir kgit-meta $vflags $extra --apply $meta_dir/$e-meta
 
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. Could not apply meta series $meta_dir/$e-meta"
