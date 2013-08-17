@@ -20,22 +20,23 @@ usage()
 cat <<EOF
 
  kgit-s2q [--author <author name> ] [-n] [--patches <dir>] [-a]
-          [--current] [--series] [--gen] [-c <count>] [-v] [-h] -- [<patch>]"
+          [--current] [--series] [--annotated] [--gen] [-c <count>] [-v] [-h] -- [<patch>]"
 
-    --series:  dump the series file and exit
-    --gen:     generate patch headers if missing
-    --author:  patch author to use if missing, in the format of: "First Last <foo@bar.com>"
-    --patches: directory containing the series file to use
-    --current: show top currently applied patch
-    -c:        number of commits to test when autoresuming
-    -a:        autoresume series after last sucessfully applied patch
-    -v:        verbose
-    -n:        dry run
-    -h:        help
+    --series:    dump the series file and exit
+    --gen:       generate patch headers if missing
+    --author:    patch author to use if missing, in the format of: "First Last <foo@bar.com>"
+    --patches:   directory containing the series file to use
+    --current:   show top currently applied patch
+    --annotated: the series is annotated, use the annotations for auto resume
+    -c:          number of commits to test when autoresuming
+    -a:          autoresume series after last sucessfully applied patch
+    -v:          verbose
+    -n:          dry run
+    -h:          help
 
-    --:        marks the end of options on the command line
+    --:          marks the end of options on the command line
 
-    <patch>:   patch to use as the starting point (turns autoresume off)
+    <patch>:     patch to use as the starting point (turns autoresume off)
 
 EOF
 }
@@ -63,8 +64,16 @@ next_patch()
 	PARENT=`git show $TOP_COMMIT|grep ommit|grep 'pstream\|herry\|tip'|sed 's/.* \([0-9a-f]\+\).*/\1/'`
 
 	CLEN=`echo $PARENT|wc -c`
-	if [ $CLEN -ne 41 ]; then
-
+	if [ $CLEN -eq 41 ] && [ -n "$ANNOTATED_SERIES" ]; then
+		# searching via PARENT ID, which is an annotation found in the patch itself
+		if [ -z "$FENCE_POST" ]; then
+			for i in `tac $DIR/series`; do
+				if [ -z "$FENCE_POST" ]; then
+					FENCE_POST=`grep -l $PARENT $DIR/$i`
+				fi
+			done
+		fi
+	else
 		if [ -n "$VERBOSE" ]; then
 			echo "[INFO] No annotated resume point (parent ID) falling back to patch id detection"
 		fi
@@ -180,15 +189,6 @@ next_patch()
 		rm -f $DS1 $DS2 $DS3 $DS4
 
 		return
-	else
-		# searching via PARENT ID, which is an annotation found in the patch itself
-		if [ -z "$FENCE_POST" ]; then
-			for i in `tac $DIR/series`; do
-				if [ -z "$FENCE_POST" ]; then
-					FENCE_POST=`grep -l $PARENT $DIR/$i`
-				fi
-			done
-		fi
 	fi
 }
 
@@ -224,6 +224,9 @@ do
 		;;
 	--current)
 		DUMP_NEXT_PATCH=1
+		;;
+	--annotated)
+		ANNOTATED_SERIES=1
 		;;
 	--help|-h)
 		usage
