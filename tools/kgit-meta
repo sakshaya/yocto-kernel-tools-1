@@ -664,15 +664,17 @@ _strip_common_prefix()
 
 do_pending_patches()
 {
+    # if there isn't a series file, or we haven't seen any "patch" commands
+    # there's nothing to push, so exit early
+    if [ -z "$series_file" ] || [ -z "$last_patch_to_push" ]; then
+	return
+    fi
+
     if [ -n "$verbose" ]; then
 	flags="-v"
     fi
 	
-    if [ -n "$last_patch_to_push" ]; then
-	patch_flags=" -- $last_patch_to_push"
-    else
-	patch_flags="-a"
-    fi
+    patch_flags="-a"
 
     eval "KMETA=$meta_dir kgit-s2q $flags --gen --patches `dirname $series_file` $patch_flags $_redir"
     if [ $? -ne 0 ]; then
@@ -766,9 +768,8 @@ do_patch()
 
 	    if [ -n "$added_to_series" ]; then
 		track_patch $sname
-	    # else
-	    # 	last_patch_to_push=$sname
 	    fi
+	    last_patch_to_push=$sname
 
 	    if [ $? -ne 0 ]; then
 		exit 1
