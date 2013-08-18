@@ -192,6 +192,55 @@ next_patch()
 	fi
 }
 
+create_resolution_script()
+{
+cat <<EOF
+#!/bin/bash
+
+  echo "running: git apply --reject .git/rebase-apply/patch"
+  git apply --reject .git/rebase-apply/patch > /dev/null
+  echo ""
+  echo "[INFO] resolving rejects"
+  for f in \`git ls-files -o | grep rej | sed 's/\.rej//'\`; do
+      echo "[INFO] resolving: \$f"
+
+      rm -f \$f.porig
+
+      echo "   running: wiggle --replace \$f \$f.rej"
+      wiggle --replace \$f \$f.rej > /dev/null
+      
+      echo "[INFO] checking resolution" 
+      echo -------------------- original reject -----------------------------
+      cat \$f\.rej
+      echo --------------------- wiggled in -----------------------------
+      diff -up \$f.porig \$f
+      echo ------------------------------------------------------------------
+
+      RJSTAT=\`diffstat \$f\.rej |grep changed\`
+      echo "Reject  had: "\$RJSTAT
+
+      RFSTAT=\`diff -up \$f.porig \$f | diffstat |grep changed\`
+      echo "Refresh has: "\$RFSTAT
+
+      if [ "\$RJSTAT" = "\$RFSTAT" ]; then
+          echo -n "Remove porig and reject now? [Y/n/exit] "
+          read RESP
+          if [ x\$RESP = x -o x\$RESP = xy ] ; then
+                rm \$f\.porig \$f\.rej
+          elif [ x\$RESP = xexit ] ; then
+                 exit 1
+          fi
+      fi
+  done
+
+  git ls-files -m -o -x "meta*" -x "*.rej" -x "*.porig" | xargs git add
+  git am --resolved
+
+  echo "[INFO] refresh patch via:"
+  echo "  git format-patch -o <original series dir> HEAD^"
+EOF
+}
+
 quilt_author=""
 while test $# != 0
 do
@@ -309,7 +358,7 @@ if [ -n "$DUMP_NEXT_PATCH" ]; then
 	fi
 
 	if [ -z "$FENCE_POST" ]; then
-		echo "All patches applied"
+		cat $SERIES | head -n 1 | sed "s%^%$DIR/%"
 	else
 		echo "$FENCE_POST"
 	fi
@@ -459,9 +508,40 @@ do
 			fi
 
 			git apply --index -C1 ${level:+"$level"} "$tmp_patch"
-			if [ $? != 0 ];then
+			if [ $? != 0 ]; then
+
+			        # put all the pieces that git am requires to complete
+			        # the resolution of the reject. Why not just use git am ?
+			        # The reason we are in here is because the patch was likely
+			        # missing some requirement elements for git am to apply it.
+			        # so rather that re-writing the patch (Which could be in a
+			        # read only location), we generate what we need and put 
+			        # the parts in place, so it can be resolved and not happen
+			        # again.
+				echo 1 > $tmp_dir/last
+				echo 1 > $tmp_dir/next
+				echo t > $tmp_dir/utf8
+
+				touch $tmp_dir/keep
+				touch $tmp_dir/scissors
+				touch $tmp_dir/no_inbody_headers
+				touch $tmp_dir/quiet
+				touch $tmp_dir/threeway
+				touch $tmp_dir/apply-opt
+				touch $tmp_dir/sign
+
+				cp $DIR/$i $tmp_dir/0001
+	
+				echo "$SUBJECT"  > $tmp_dir/final-commit
+				echo >> $tmp_dir/final-commit
+				cat "$tmp_msg" >> $tmp_dir/final-commit
+
+				create_resolution_script > $tmp_dir/resolve_rejects
+				chmod +x $tmp_dir/resolve_rejects
+
 				echo "[ERROR]: Application of $DIR/$i failed."
-				echo "         Patch needs to be refreshed"
+				echo "         Patch needs to be refreshed. Sample resolution script:"
+				echo "             .git/rebase-apply/resolve_rejects"
 				exit 1
 			fi
 			tree=$(git write-tree)
@@ -472,7 +552,14 @@ do
 		git am --keep-non-patch $DIR/$i
 		if [ $? != 0 ];then
 			echo "[ERROR]: git am of $DIR/$i failed."
-			echo "	       Patch needs to be refreshed"
+			echo "         Patch needs to be refreshed. Sample resolution:"
+
+			create_resolution_script > $tmp_dir/resolve_rejects
+			chmod +x $tmp_dir/resolve_rejects
+			
+			echo "[ERROR]: Application of $DIR/$i failed."
+			echo "         Patch needs to be refreshed. Sample resolution script:"
+			echo "             .git/rebase-apply/resolve_rejects"
 			exit 1
 		fi
 	fi
