@@ -322,10 +322,13 @@ fi
 if [ -n "$QUILT_PATCHES" ]; then
 	DIR="$QUILT_PATCHES"
 else
-    	DIR="$META/patches/$BRANCH"
-	if [ ! -d "$DIR" ]; then
-		DIR=`dirname $0 |sed 's/scripts$//'`
-	fi
+	DIR="$META/patches/$BRANCH"
+fi
+
+if [ ! -d "$DIR" ]; then
+	echo ""
+	echo "[ERROR] Can't find patch dir at $DIR"
+	usage
 fi
 
 SERIES=$DIR/series
