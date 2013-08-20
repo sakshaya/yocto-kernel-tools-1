@@ -263,6 +263,8 @@ if [ -n "$new_repo" ]; then
 	    else
 		cd $dest
 		git config core.bare false
+		# layering on 1k+ of patches makes auto gc inevitable/annoying
+		git config gc.auto 0
 		git checkout -q -f $checkout_opts master
 	    fi
 
