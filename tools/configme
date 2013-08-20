@@ -239,10 +239,30 @@ if [ -z "$target" ]; then
     target=standard
 fi
 
-META_DIR=$KMETA
-if [ -z "$META_DIR" ]; then
-	META_DIR=meta
-fi
+# find the meta directory
+meta_dir()
+{
+    # first check to see if there's a directory of the same name
+    # as the meta branch. That's the first choice. If it doesn't exist
+    # check the meta branch name a .$meta_branch, and finally fall back
+    # to .meta if everything fails
+    if [ -n "$META_BRANCH" ]; then
+	if [ -d "$META_BRANCH" ]; then
+	    META_DIR="$META_BRANCH"
+	elif [ -d ".$META_BRANCH" ]; then
+	    META_DIR=".$META_BRANCH"
+	fi
+    fi
+    if [ -z "$META_DIR" ]; then
+	META_DIR=`ls -d .meta* | head -1`
+	if [ -z "$META_DIR" ]; then
+	    META_DIR=".meta"
+	fi
+    fi
+}
+
+META_BRANCH=$KMETA
+meta_dir
 
 echo "[INFO] Configuring target/machine combo: \"$target/$machine\""
 run_board_config

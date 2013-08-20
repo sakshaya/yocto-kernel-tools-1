@@ -131,6 +131,28 @@ metaize()
 	fi
 }
 
+# find the meta directory
+meta_dir()
+{
+    # first check to see if there's a directory of the same name
+    # as the meta branch. That's the first choice. If it doesn't exist
+    # check the meta branch name a .$meta_branch, and finally fall back
+    # to .meta if everything fails
+    if [ -n "$meta_branch" ]; then
+	if [ -d "$meta_branch" ]; then
+	    meta_dir="$meta_branch"
+	elif [ -d ".$meta_branch" ]; then
+	    meta_dir=".$meta_branch"
+	fi
+    fi
+    if [ -z "$meta_dir" ]; then
+	meta_dir=`ls -d .meta* | head -1`
+	if [ -z "$meta_dir" ]; then
+	    meta_dir=".meta"
+	fi
+    fi
+}
+
 # restore the checkpoint. This routine supports two types of meta
 # data:
 #    - global meta data that is available on all branches, all the time
@@ -169,16 +191,8 @@ decheckpoint()
 			;;
 	esac
 
-	# first check to see if there's a directory of the same name
-	# as the meta branch. That's the first choice. If it doesn't exist
-	# the default is a directory called 'meta'
-	meta_dir=$KMETA
-	if [ -z "$meta_dir" ]; then
-	    meta_dir=meta
-	fi
-	if [ -n "$meta_branch" ] && [ -d "$meta_branch" ]; then
-		meta_dir=$meta_branch
-	fi
+	# set the meta dir
+	meta_dir
 }
 
 # checks and sets the defconfig for the build

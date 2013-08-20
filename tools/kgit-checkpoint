@@ -162,8 +162,8 @@ if [ -n "$checkpointing" ]; then
         # create a meta-information branch
 	git checkout --orphan $checkpoint_branch
         # stage the requested files/directories
-	git rm -rfq `ls | grep -v meta`
-	git rm -f .gitignore
+	git rm -rfq `ls | grep -v $checkpoint_branch`
+	git rm -f $checkpoint_branch/.gitignore
     else
 	git checkout $checkpoint_branch
     fi
@@ -230,6 +230,8 @@ else # restoring ...
     # delete our working branch, and return to the original one
     git checkout -q $current_branch
     git branch -D $checkpoint_branch-temp
+
+    mv $checkpoint_branch .$checkpoint_branch
 fi
 
 

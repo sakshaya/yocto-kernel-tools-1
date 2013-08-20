@@ -318,22 +318,23 @@ if [ -n "$new_repo" ]; then
 
     install_resources
 
-    # turn guilt autotagging off, we don't use them manually and don't
-    # want the tags floating around after we are done.
-    #    correction: we need this for "refresh"
-    # git config --global guilt.autotag 0
 
     # we don't want to commit any links to patches, so just exclude the
     # entire directory
 
-    echo "# nothing to ignore" > $meta_dir/.gitignore
+    echo "top_tgt" > $meta_dir/.gitignore
+    echo "*.pre" >>  $meta_dir/.gitignore
+    echo "*.sanitized" >>  $meta_dir/.gitignore
+    echo "cfg/*" >>  $meta_dir/.gitignore
+    echo "!cfg/kernel-cache/" >>  $meta_dir/.gitignore
+
+    echo ""
     echo "*.patch" > $meta_dir/patches/.gitignore
     echo "*.diff" >> $meta_dir/patches/.gitignore
     if [ -e .gitignore ]; then
 	cat .gitignore | sed s%^patches%#patches% | \
             sed s%^series%#series% > .gitignore.tmp
 	mv .gitignore.tmp .gitignore
-	echo "/$meta_dir" >> .gitignore
 
 	if [ -n "$init_creates_content" ]; then
 	    git add .gitignore 

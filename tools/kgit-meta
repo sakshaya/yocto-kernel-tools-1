@@ -752,9 +752,7 @@ do_patch()
 
 	    if [ -d $patches_dir ] && [ ! -d $patches_dir/links ]; then
     		$(  cd $patches_dir; 
-                    if [ -f links ]; then
-			rm -f links
-		    fi 
+		    rm -f links
 		    ln -s $relative_dir/$meta_dir/cfg links
 		)
 	    fi
@@ -1000,8 +998,11 @@ fi
 
 meta_dir=`find_dir $meta_dir_name`
 if [ -z "$meta_dir" ]; then
-    echo "ERROR cannot locate '$meta_dir_name' directory"
-    exit 1
+    meta_dir=`find_dir ".$meta_dir_name"`
+    if [ -z "$meta_dir" ]; then
+	echo "ERROR cannot locate '$meta_dir_name' directory"
+	exit 1
+    fi
 fi
 
 work_cfg_dir=$meta_dir/cfg
