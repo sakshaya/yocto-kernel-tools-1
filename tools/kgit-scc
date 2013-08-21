@@ -637,6 +637,12 @@ if [ -n "$apply" ]; then
         # we are allowed to tidy up ...
 	echo " phase # $phase_count) cleaning new object files"
 	(
+	    cd $output/.git/rebase-apply
+	    if [ $? -eq 0 ]; then
+		rm -rf *
+	    fi
+	)
+	(
 	    cd $output/$exec_dir
 	    if [ $? -eq 0 ]; then
 		rm -rf *
