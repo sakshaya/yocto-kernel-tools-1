@@ -486,6 +486,7 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
     executables=""
     old_dir=`pwd`
     exec_total=0
+    failed=`mktemp`
     for dir in $search_dirs; do
 	if [ -d $dir ]; then
 	    echo ""
@@ -517,6 +518,7 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
 			scc --force -o $outname-meta $inc_dirs $repo_dir $f
 			if [ $? -ne 0 ]; then
 			    echo "ERROR: could not generate $outname-meta"
+			    echo $outname-meta >> $failed
 			    exit 1
 			fi
 			mv $outname-meta ../..
@@ -546,6 +548,13 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
 	    let phase_count=$phase_count+1
 	fi
     done
+fi
+
+if [ -s $failed ]; then
+	echo ERROR: aborting due to meta series generation failure:
+	cat $failed
+	rm -f $failed
+	exit 1
 fi
 
 if [ -n "$apply" ]; then
