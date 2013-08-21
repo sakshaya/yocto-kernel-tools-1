@@ -67,7 +67,7 @@ next_patch()
 	if [ $CLEN -eq 41 ] && [ -n "$ANNOTATED_SERIES" ]; then
 		# searching via PARENT ID, which is an annotation found in the patch itself
 		if [ -z "$FENCE_POST" ]; then
-			for i in `tac $DIR/series`; do
+			for i in `tac $DIR/series | grep -v -e ^# -e ^$`; do
 				if [ -z "$FENCE_POST" ]; then
 					FENCE_POST=`grep -l $PARENT $DIR/$i`
 				fi
@@ -90,7 +90,7 @@ next_patch()
 			git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' > $DS4
 
 		# find the patch in the series that matches it
-		for i in `tac $DIR/series`; do
+		for i in `tac $DIR/series | grep -v -e ^# -e ^$`; do
 			git patch-id < $DIR/$i | cut -f1 -d' ' > $DS2
 			cmp -s $DS1 $DS2
 			if [ $? = 0 ]; then
@@ -112,7 +112,7 @@ next_patch()
 			echo "[INFO] Could not autodetect resume point via patch ID falling back to diffstat detection"
 		fi
 
-		for i in `tac $DIR/series`; do
+		for i in `tac $DIR/series | grep -v -e ^# -e ^$`; do
 			cat $DIR/$i | git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' > $DS3
 			cmp -s $DS3 $DS4
 			if [ $? -eq 0 ]; then
@@ -126,7 +126,7 @@ next_patch()
 
 		# diffstats
 		git show $TOP_COMMIT | diffstat -p0 > $DS1
-		for i in `tac $DIR/series`; do
+		for i in `tac $DIR/series | grep -v -e ^# -e ^$`; do
 			cat $DIR/$i | diffstat -p0 > $DS2
 			cmp -s $DS1 $DS2
 			if [ $? = 0 ]; then
@@ -154,7 +154,7 @@ next_patch()
 		# in the series. The search can continue deeper into history, or we can flip
 		# the search. Let's take the last entry in the series, and see if its patch-id
 		# is on the branch.
-		for i in `tac $DIR/series | head -n1`; do
+		for i in `tac $DIR/series | grep -v -e ^# -e ^$ | head -n1`; do
 			# grab the patch ID
 			cat $DIR/$i | git patch-id | cut -f1 -d' ' > $DS1
 
