@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#  Copyright (c) 2009-2010 Wind River Systems, Inc.
+#  Copyright (c) 2009-2013 Wind River Systems, Inc.
 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
@@ -14,6 +14,26 @@
 # Basic sanity checks on the kernel fragments, i.e. whether a BSP
 # is setting things it shouldn't, whether things are redefined,
 # and whether what you asked for is what you got.
+
+while test $# != 0
+do
+	case "$1" in
+	--help|-h)
+		usage
+		exit
+		;;
+        -c)     CLEAN=t
+		;;
+        *)      break
+		;;
+	--)
+		shift
+		break
+		;;
+	esac
+
+	shift
+done
 
 KERNEL_CONFIG=$1
 META=$2
@@ -131,6 +151,26 @@ if [ -s $KCONF_DIR/obsolete.kcf ]; then
 	echo
 fi
 
+if [ -n "$CLEAN" ]; then
+    if [ -s $KCONF_DIR/obsolete.kcf ]; then
+	echo "[INFO]: cleaning obsolete options"
+	kcf_files=`find $META_DIR/cfg/kernel-cache -name '*.kcf'`
+	for obsolete in `cat $KCONF_DIR/obsolete.kcf`; do
+	    for k in $kcf_files; do
+		grep -q $obsolete $k
+		if [ $? -eq 0 ]; then
+		    echo "   Obsolete Kconfig $obsolete is in $k"
+		    echo -n "    Remove the option from the file now? [Y/n] "
+		    read RESP
+		    if [ x$RESP = x -o x$RESP = xy ] ; then
+			obsolete_escaped=`echo $obsolete | sed 's%/%\\\/%g'`
+			sed -i.orig "/$obsolete_escaped/d" $k
+		    fi
+		fi
+	    done
+	done
+    fi
+fi
 
 ##########################################################################
 # Warn on any new Kconfig files that we don't know about
@@ -399,6 +439,26 @@ if [ -s $KCONF_DIR/invalid.cfg ]; then
 	echo $KCONF_DIR/invalid.cfg | sed 's=^'$LINUX_SRC'/=   ='
 	echo "   This BSP sets config options that are not offered anywhere within this kernel"
 	echo
+fi
+
+if [ -n "$CLEAN" ]; then
+    if [ -s $KCONF_DIR/invalid.cfg ]; then
+	echo "[INFO]: cleaning invalid options"
+	cfg_files=`find $META_DIR/cfg/kernel-cache -name '*.cfg'`
+	for invalid in `cat $KCONF_DIR/invalid.cfg`; do
+	    for k in $cfg_files; do
+		grep -q $invalid $k
+		if [ $? -eq 0 ]; then
+		    echo     "   Invalid Kconfig option $invalid is in $k"
+		    echo -n "    Remove the option from the file now? [Y/n] "
+		    read RESP
+		    if [ x$RESP = x -o x$RESP = xy ] ; then
+			sed -i.orig "/$invalid/d" $k
+		    fi
+		fi
+	    done
+	done
+    fi
 fi
 
 rm -f $KCONF_DIR/mismatch.cfg
