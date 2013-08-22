@@ -263,7 +263,6 @@ do
 		VERBOSE=1
 		;;
 	--gen)
-		GENERATE_HEADER=1
 		;;
 	--series)
 		DUMP_SERIES=1
@@ -454,15 +453,13 @@ do
 		echo "($APPLIED/$COUNT) `basename $i`"
 	fi
 
-	if [ -z "$GENERATE_HEADER" ]; then
-		git am --keep-non-patch $DIR/$i > /dev/null 2>&1
-		if [ $? != 0 ];then
-			echo "[INFO]: check of $DIR/$i with \"git am\" did not pass."
-			git am --abort > /dev/null 2>&1
-		else
-			commit=$(git rev-parse HEAD)
-			continue
-		fi
+	git am --keep-non-patch $DIR/$i > /dev/null 2>&1
+	if [ $? != 0 ];then
+		echo "[INFO]: check of $DIR/$i with \"git am\" did not pass."
+		git am --abort > /dev/null 2>&1
+	else
+		commit=$(git rev-parse HEAD)
+		continue
 	fi
 
 	# git am failed; take manual processing path.
