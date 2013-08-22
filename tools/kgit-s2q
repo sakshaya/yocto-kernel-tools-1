@@ -510,6 +510,8 @@ do
 				echo "Applying: $SUBJECT"
 			fi
 
+			# update-ref is what "git am" does.
+			git update-ref ORIG_HEAD HEAD
 			git apply --index -C1 ${level:+"$level"} "$tmp_patch"
 			if [ $? != 0 ]; then
 
@@ -525,11 +527,15 @@ do
 				echo 1 > $tmp_dir/next
 				echo t > $tmp_dir/utf8
 
+				# also copied from git-am.sh
+				git rev-parse --verify -q HEAD > $tmp_dir/abort-safety
+
 				touch $tmp_dir/keep
 				touch $tmp_dir/scissors
 				touch $tmp_dir/no_inbody_headers
 				touch $tmp_dir/quiet
 				touch $tmp_dir/threeway
+				touch $tmp_dir/applying
 				touch $tmp_dir/apply-opt
 				touch $tmp_dir/sign
 
