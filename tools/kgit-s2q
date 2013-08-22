@@ -512,7 +512,7 @@ do
 
 			# update-ref is what "git am" does.
 			git update-ref ORIG_HEAD HEAD
-			git apply --index -C1 ${level:+"$level"} "$tmp_patch"
+			git apply --index -C1 "$tmp_patch"
 			if [ $? != 0 ]; then
 
 			        # put all the pieces that git am requires to complete
