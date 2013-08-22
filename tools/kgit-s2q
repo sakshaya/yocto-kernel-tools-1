@@ -455,8 +455,15 @@ do
 
 	git am --keep-non-patch $DIR/$i > /dev/null 2>&1
 	if [ $? != 0 ];then
-		echo "[INFO]: check of $DIR/$i with \"git am\" did not pass."
 		git am --abort > /dev/null 2>&1
+		echo "[INFO]: check of $DIR/$i with \"git am\" did not pass, trying reduced context."
+		git am -C1 --keep-non-patch $DIR/$i > /dev/null 2>&1
+		if [ $? = 0 ]; then
+			commit=$(git rev-parse HEAD)
+			continue
+		fi
+		git am --abort > /dev/null 2>&1
+		echo "[INFO]: Context reduced git-am of $DIR/$i with \"git am\" did not work, trying \"apply\"."
 	else
 		commit=$(git rev-parse HEAD)
 		continue
