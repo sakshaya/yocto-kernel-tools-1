@@ -454,7 +454,22 @@ do
 		echo -n "($APPLIED/$COUNT) "
 	fi
 
-	if [ -n "$GENERATE_HEADER" ]; then
+	if [ -z "$GENERATE_HEADER" ]; then
+		git am --keep-non-patch $DIR/$i
+		if [ $? != 0 ];then
+			echo "[ERROR]: git am of $DIR/$i failed."
+			echo "         Patch needs to be refreshed. Sample resolution:"
+
+			create_resolution_script > $tmp_dir/resolve_rejects
+			chmod +x $tmp_dir/resolve_rejects
+			
+			echo "[ERROR]: Application of $DIR/$i failed."
+			echo "         Patch needs to be refreshed. Sample resolution script:"
+			echo "             .git/rebase-apply/resolve_rejects"
+			exit 1
+		fi
+		commit=$(git rev-parse HEAD)
+	else
 		if [ ! -d "$tmp_dir" ]; then
 			mkdir $tmp_dir || exit 2
 		fi
@@ -556,20 +571,6 @@ do
 			SUBJECT=""
 		fi
 	else
-		git am --keep-non-patch $DIR/$i
-		if [ $? != 0 ];then
-			echo "[ERROR]: git am of $DIR/$i failed."
-			echo "         Patch needs to be refreshed. Sample resolution:"
-
-			create_resolution_script > $tmp_dir/resolve_rejects
-			chmod +x $tmp_dir/resolve_rejects
-			
-			echo "[ERROR]: Application of $DIR/$i failed."
-			echo "         Patch needs to be refreshed. Sample resolution script:"
-			echo "             .git/rebase-apply/resolve_rejects"
-			exit 1
-		fi
-		commit=$(git rev-parse HEAD)
 	fi
 done
 
