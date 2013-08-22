@@ -469,108 +469,109 @@ do
 			exit 1
 		fi
 		commit=$(git rev-parse HEAD)
-	else
-		if [ ! -d "$tmp_dir" ]; then
-			mkdir $tmp_dir || exit 2
-		fi
+		continue
+	fi
 
-		git mailinfo -b "$tmp_msg" "$tmp_patch" \
-		    <"$DIR/$i" >"$tmp_info" || exit 3
-		test -s "$tmp_patch" || {
-			echo "Patch is empty.  Was it split wrong?"
-			exit 1
-		}
+	# git am failed; take manual processing path.
+	if [ ! -d "$tmp_dir" ]; then
+		mkdir $tmp_dir || exit 2
+	fi
 
-		#  Parse the author information
-		GIT_AUTHOR_NAME=$(sed -ne 's/Author: //p' "$tmp_info")
-		GIT_AUTHOR_EMAIL=$(sed -ne 's/Email: //p' "$tmp_info")
-		export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL
-		while test -z "$GIT_AUTHOR_EMAIL" && test -z "$GIT_AUTHOR_NAME" ; do
-			if [ -n "$quilt_author" ] ; then
-				GIT_AUTHOR_NAME="$quilt_author_name";
-				GIT_AUTHOR_EMAIL="$quilt_author_email";
-			else
-				echo "No author found in $patch_name" >&2;
-				echo "---"
-				cat $tmp_msg
-				printf "Author: ";
-				read patch_author
+	git mailinfo -b "$tmp_msg" "$tmp_patch" \
+	    <"$DIR/$i" >"$tmp_info" || exit 3
+	test -s "$tmp_patch" || {
+		echo "Patch is empty.  Was it split wrong?"
+		exit 1
+	}
 
-				echo "$patch_author"
-
-				patch_author_name=$(expr "z$patch_author" : 'z\(.*[^ ]\) *<.*') &&
-				patch_author_email=$(expr "z$patch_author" : '.*<\([^>]*\)') &&
-				test '' != "$patch_author_name" &&
-				test '' != "$patch_author_email" &&
-				GIT_AUTHOR_NAME="$patch_author_name" &&
-				GIT_AUTHOR_EMAIL="$patch_author_email"
-			fi
-		done
-		GIT_AUTHOR_DATE=$(sed -ne 's/Date: //p' "$tmp_info")
-		SUBJECT=$(sed -ne 's/Subject: //p' "$tmp_info")
-		export GIT_AUTHOR_DATE SUBJECT
-		if [ -z "$SUBJECT" ] ; then
-			SUBJECT=$(echo $patch_name | sed -e 's/.patch$//')
-		fi
-
-		if [ -n "$VERBOSE" ]; then
-			echo "Applying: $SUBJECT"
-		fi
-
-		# update-ref is what "git am" does.
-		git update-ref ORIG_HEAD HEAD
-		git apply --index -C1 "$tmp_patch"
-		if [ $? != 0 ]; then
-
-		        # put all the pieces that git am requires to complete
-		        # the resolution of the reject. Why not just use git am ?
-		        # The reason we are in here is because the patch was likely
-		        # missing some requirement elements for git am to apply it.
-		        # so rather that re-writing the patch (Which could be in a
-		        # read only location), we generate what we need and put 
-		        # the parts in place, so it can be resolved and not happen
-		        # again.
-			echo 1 > $tmp_dir/last
-			echo 1 > $tmp_dir/next
-			echo t > $tmp_dir/utf8
-
-			# also copied from git-am.sh
-			git rev-parse --verify -q HEAD > $tmp_dir/abort-safety
-
-			touch $tmp_dir/keep
-			touch $tmp_dir/scissors
-			touch $tmp_dir/no_inbody_headers
-			touch $tmp_dir/quiet
-			touch $tmp_dir/threeway
-			touch $tmp_dir/applying
-			touch $tmp_dir/apply-opt
-			touch $tmp_dir/sign
-
-			cp $DIR/$i $tmp_dir/0001
-
-			echo "$SUBJECT"  > $tmp_dir/final-commit
-			echo >> $tmp_dir/final-commit
-			cat "$tmp_msg" >> $tmp_dir/final-commit
-
-			create_resolution_script > $tmp_dir/resolve_rejects
-			chmod +x $tmp_dir/resolve_rejects
-
-			echo "[ERROR]: Application of $DIR/$i failed."
-			echo "         Patch needs to be refreshed. Sample resolution script:"
-			echo "             .git/rebase-apply/resolve_rejects"
-			exit 1
+	#  Parse the author information
+	GIT_AUTHOR_NAME=$(sed -ne 's/Author: //p' "$tmp_info")
+	GIT_AUTHOR_EMAIL=$(sed -ne 's/Email: //p' "$tmp_info")
+	export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL
+	while test -z "$GIT_AUTHOR_EMAIL" && test -z "$GIT_AUTHOR_NAME" ; do
+		if [ -n "$quilt_author" ] ; then
+			GIT_AUTHOR_NAME="$quilt_author_name";
+			GIT_AUTHOR_EMAIL="$quilt_author_email";
 		else
-			# git apply worked, take next steps.
-			tree=$(git write-tree) &&
-			commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
-			git update-ref -m "kgit-s2q: $patch_name" HEAD $commit || exit 4
-			
-			GIT_AUTHOR_NAME=""
-			GIT_AUTHOR_EMAIL=""
-			GIT_AUTHOR_DATE=""
-			SUBJECT=""
+			echo "No author found in $patch_name" >&2;
+			echo "---"
+			cat $tmp_msg
+			printf "Author: ";
+			read patch_author
+
+			echo "$patch_author"
+
+			patch_author_name=$(expr "z$patch_author" : 'z\(.*[^ ]\) *<.*') &&
+			patch_author_email=$(expr "z$patch_author" : '.*<\([^>]*\)') &&
+			test '' != "$patch_author_name" &&
+			test '' != "$patch_author_email" &&
+			GIT_AUTHOR_NAME="$patch_author_name" &&
+			GIT_AUTHOR_EMAIL="$patch_author_email"
 		fi
+	done
+	GIT_AUTHOR_DATE=$(sed -ne 's/Date: //p' "$tmp_info")
+	SUBJECT=$(sed -ne 's/Subject: //p' "$tmp_info")
+	export GIT_AUTHOR_DATE SUBJECT
+	if [ -z "$SUBJECT" ] ; then
+		SUBJECT=$(echo $patch_name | sed -e 's/.patch$//')
+	fi
+
+	if [ -n "$VERBOSE" ]; then
+		echo "Applying: $SUBJECT"
+	fi
+
+	# update-ref is what "git am" does.
+	git update-ref ORIG_HEAD HEAD
+	git apply --index -C1 "$tmp_patch"
+	if [ $? != 0 ]; then
+
+	        # put all the pieces that git am requires to complete
+	        # the resolution of the reject. Why not just use git am ?
+	        # The reason we are in here is because the patch was likely
+	        # missing some requirement elements for git am to apply it.
+	        # so rather that re-writing the patch (Which could be in a
+	        # read only location), we generate what we need and put 
+	        # the parts in place, so it can be resolved and not happen
+	        # again.
+		echo 1 > $tmp_dir/last
+		echo 1 > $tmp_dir/next
+		echo t > $tmp_dir/utf8
+
+		# also copied from git-am.sh
+		git rev-parse --verify -q HEAD > $tmp_dir/abort-safety
+
+		touch $tmp_dir/keep
+		touch $tmp_dir/scissors
+		touch $tmp_dir/no_inbody_headers
+		touch $tmp_dir/quiet
+		touch $tmp_dir/threeway
+		touch $tmp_dir/applying
+		touch $tmp_dir/apply-opt
+		touch $tmp_dir/sign
+
+		cp $DIR/$i $tmp_dir/0001
+
+		echo "$SUBJECT"  > $tmp_dir/final-commit
+		echo >> $tmp_dir/final-commit
+		cat "$tmp_msg" >> $tmp_dir/final-commit
+
+		create_resolution_script > $tmp_dir/resolve_rejects
+		chmod +x $tmp_dir/resolve_rejects
+
+		echo "[ERROR]: Application of $DIR/$i failed."
+		echo "         Patch needs to be refreshed. Sample resolution script:"
+		echo "             .git/rebase-apply/resolve_rejects"
+		exit 1
 	else
+		# git apply worked, take next steps.
+		tree=$(git write-tree) &&
+		commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
+		git update-ref -m "kgit-s2q: $patch_name" HEAD $commit || exit 4
+		
+		GIT_AUTHOR_NAME=""
+		GIT_AUTHOR_EMAIL=""
+		GIT_AUTHOR_DATE=""
+		SUBJECT=""
 	fi
 done
 
