@@ -552,10 +552,12 @@ do
 				echo "         Patch needs to be refreshed. Sample resolution script:"
 				echo "             .git/rebase-apply/resolve_rejects"
 				exit 1
+			else
+				# git apply worked, take next steps.
+				tree=$(git write-tree) &&
+				commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
+				git update-ref -m "kgit-s2q: $patch_name" HEAD $commit || exit 4
 			fi
-			tree=$(git write-tree)
-			commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit)
-			git update-ref -m "kgit-s2q: $patch_name" HEAD $commit || exit 4
 		fi
 	else
 		git am --keep-non-patch $DIR/$i
