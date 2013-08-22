@@ -249,9 +249,6 @@ do
 		shift
 		quilt_author="$1"
 		;;
-	-n|--dry-run)
-		dry_run=1
-		;;
 	--patches)
 		shift
 		QUILT_PATCHES="$1"
@@ -477,10 +474,6 @@ do
 			if [ -n "$quilt_author" ] ; then
 				GIT_AUTHOR_NAME="$quilt_author_name";
 				GIT_AUTHOR_EMAIL="$quilt_author_email";
-			elif [ -n "$dry_run" ]; then
-				echo "No author found in $patch_name" >&2;
-				GIT_AUTHOR_NAME="dry-run-not-found";
-				GIT_AUTHOR_EMAIL="dry-run-not-found";
 			else
 				echo "No author found in $patch_name" >&2;
 				echo "---"
@@ -505,59 +498,57 @@ do
 			SUBJECT=$(echo $patch_name | sed -e 's/.patch$//')
 		fi
 
-		if [ -z "$dry_run" ] ; then
-			if [ -n "$VERBOSE" ]; then
-				echo "Applying: $SUBJECT"
-			fi
+		if [ -n "$VERBOSE" ]; then
+			echo "Applying: $SUBJECT"
+		fi
 
-			# update-ref is what "git am" does.
-			git update-ref ORIG_HEAD HEAD
-			git apply --index -C1 "$tmp_patch"
-			if [ $? != 0 ]; then
+		# update-ref is what "git am" does.
+		git update-ref ORIG_HEAD HEAD
+		git apply --index -C1 "$tmp_patch"
+		if [ $? != 0 ]; then
 
-			        # put all the pieces that git am requires to complete
-			        # the resolution of the reject. Why not just use git am ?
-			        # The reason we are in here is because the patch was likely
-			        # missing some requirement elements for git am to apply it.
-			        # so rather that re-writing the patch (Which could be in a
-			        # read only location), we generate what we need and put 
-			        # the parts in place, so it can be resolved and not happen
-			        # again.
-				echo 1 > $tmp_dir/last
-				echo 1 > $tmp_dir/next
-				echo t > $tmp_dir/utf8
+		        # put all the pieces that git am requires to complete
+		        # the resolution of the reject. Why not just use git am ?
+		        # The reason we are in here is because the patch was likely
+		        # missing some requirement elements for git am to apply it.
+		        # so rather that re-writing the patch (Which could be in a
+		        # read only location), we generate what we need and put 
+		        # the parts in place, so it can be resolved and not happen
+		        # again.
+			echo 1 > $tmp_dir/last
+			echo 1 > $tmp_dir/next
+			echo t > $tmp_dir/utf8
 
-				# also copied from git-am.sh
-				git rev-parse --verify -q HEAD > $tmp_dir/abort-safety
+			# also copied from git-am.sh
+			git rev-parse --verify -q HEAD > $tmp_dir/abort-safety
 
-				touch $tmp_dir/keep
-				touch $tmp_dir/scissors
-				touch $tmp_dir/no_inbody_headers
-				touch $tmp_dir/quiet
-				touch $tmp_dir/threeway
-				touch $tmp_dir/applying
-				touch $tmp_dir/apply-opt
-				touch $tmp_dir/sign
+			touch $tmp_dir/keep
+			touch $tmp_dir/scissors
+			touch $tmp_dir/no_inbody_headers
+			touch $tmp_dir/quiet
+			touch $tmp_dir/threeway
+			touch $tmp_dir/applying
+			touch $tmp_dir/apply-opt
+			touch $tmp_dir/sign
 
-				cp $DIR/$i $tmp_dir/0001
-	
-				echo "$SUBJECT"  > $tmp_dir/final-commit
-				echo >> $tmp_dir/final-commit
-				cat "$tmp_msg" >> $tmp_dir/final-commit
+			cp $DIR/$i $tmp_dir/0001
 
-				create_resolution_script > $tmp_dir/resolve_rejects
-				chmod +x $tmp_dir/resolve_rejects
+			echo "$SUBJECT"  > $tmp_dir/final-commit
+			echo >> $tmp_dir/final-commit
+			cat "$tmp_msg" >> $tmp_dir/final-commit
 
-				echo "[ERROR]: Application of $DIR/$i failed."
-				echo "         Patch needs to be refreshed. Sample resolution script:"
-				echo "             .git/rebase-apply/resolve_rejects"
-				exit 1
-			else
-				# git apply worked, take next steps.
-				tree=$(git write-tree) &&
-				commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
-				git update-ref -m "kgit-s2q: $patch_name" HEAD $commit || exit 4
-			fi
+			create_resolution_script > $tmp_dir/resolve_rejects
+			chmod +x $tmp_dir/resolve_rejects
+
+			echo "[ERROR]: Application of $DIR/$i failed."
+			echo "         Patch needs to be refreshed. Sample resolution script:"
+			echo "             .git/rebase-apply/resolve_rejects"
+			exit 1
+		else
+			# git apply worked, take next steps.
+			tree=$(git write-tree) &&
+			commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
+			git update-ref -m "kgit-s2q: $patch_name" HEAD $commit || exit 4
 		fi
 	else
 		git am --keep-non-patch $DIR/$i
