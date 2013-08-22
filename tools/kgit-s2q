@@ -457,19 +457,12 @@ do
 	if [ -z "$GENERATE_HEADER" ]; then
 		git am --keep-non-patch $DIR/$i > /dev/null 2>&1
 		if [ $? != 0 ];then
-			echo "[ERROR]: git am of $DIR/$i failed."
-			echo "         Patch needs to be refreshed. Sample resolution:"
-
-			create_resolution_script > $tmp_dir/resolve_rejects
-			chmod +x $tmp_dir/resolve_rejects
-			
-			echo "[ERROR]: Application of $DIR/$i failed."
-			echo "         Patch needs to be refreshed. Sample resolution script:"
-			echo "             .git/rebase-apply/resolve_rejects"
-			exit 1
+			echo "[INFO]: check of $DIR/$i with \"git am\" did not pass."
+			git am --abort > /dev/null 2>&1
+		else
+			commit=$(git rev-parse HEAD)
+			continue
 		fi
-		commit=$(git rev-parse HEAD)
-		continue
 	fi
 
 	# git am failed; take manual processing path.
