@@ -451,11 +451,11 @@ do
 	fi
 
 	if [ -n "$VERBOSE" ]; then
-		echo -n "($APPLIED/$COUNT) "
+		echo "($APPLIED/$COUNT) `basename $i`"
 	fi
 
 	if [ -z "$GENERATE_HEADER" ]; then
-		git am --keep-non-patch $DIR/$i
+		git am --keep-non-patch $DIR/$i > /dev/null 2>&1
 		if [ $? != 0 ];then
 			echo "[ERROR]: git am of $DIR/$i failed."
 			echo "         Patch needs to be refreshed. Sample resolution:"
@@ -514,10 +514,6 @@ do
 	export GIT_AUTHOR_DATE SUBJECT
 	if [ -z "$SUBJECT" ] ; then
 		SUBJECT=$(echo $patch_name | sed -e 's/.patch$//')
-	fi
-
-	if [ -n "$VERBOSE" ]; then
-		echo "Applying: $SUBJECT"
 	fi
 
 	# update-ref is what "git am" does.
