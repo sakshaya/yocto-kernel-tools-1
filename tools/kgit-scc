@@ -637,20 +637,20 @@ if [ -n "$apply" ]; then
         # we are allowed to tidy up ...
 	echo " phase # $phase_count) cleaning new object files"
 	(
-	    cd $output/.git/rebase-apply
+	    cd $output/.git/rebase-apply 2> /dev/null
 	    if [ $? -eq 0 ]; then
 		rm -rf *
 	    fi
 	)
 	(
-	    cd $output/$exec_dir
+	    cd $output/$exec_dir 2> /dev/null
 	    if [ $? -eq 0 ]; then
 		rm -rf *
 		echo "scc object files are placed in this directory" > README
 	    fi
 	)
 	(
-	    cd $output/$meta_dir
+	    cd $output/$meta_dir 2> /dev/null
 	    if [ $? -eq 0 ]; then
 		rm -rf *-meta
 	    fi
