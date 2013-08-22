@@ -573,6 +573,7 @@ do
 			echo "             .git/rebase-apply/resolve_rejects"
 			exit 1
 		fi
+		commit=$(git rev-parse HEAD)
 	fi
 done
 
