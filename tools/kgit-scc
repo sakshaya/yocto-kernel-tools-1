@@ -658,3 +658,10 @@ if [ -n "$apply" ]; then
 	let phase_count=$phase_count+1
     fi
 fi
+
+if [ -s $meta_dir/refresh ]; then
+	echo **********************************************************
+	echo "[INFO]" There are patches needing refresh,
+	echo               See file $meta_dir/refresh
+	echo **********************************************************
+fi
