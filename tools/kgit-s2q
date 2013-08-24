@@ -154,7 +154,7 @@ next_patch()
 		# in the series. The search can continue deeper into history, or we can flip
 		# the search. Let's take the last entry in the series, and see if its patch-id
 		# is on the branch.
-		for i in `tac $DIR/series | grep -v -e ^# -e ^$ | head -n1`; do
+		for i in `tac $DIR/series | grep -v -e ^# -e ^$`; do
 			# grab the patch ID
 			cat $DIR/$i | git patch-id | cut -f1 -d' ' > $DS1
 
@@ -171,7 +171,28 @@ next_patch()
 				FENCE_POST=$i
 				if [ -n "$VERBOSE" ]; then
 					echo "[NOTE] series and branch are out of sync"
-					echo "[INFO] found the top of series in the branch, autoresuming"
+					echo "[INFO] found the top of series via patch-id in the branch, autoresuming"
+					break
+				fi
+			else
+				# we failed to match by patch-id. In case a patch was fuzzed into the tree, double check via
+				# subject.
+				cat $DIR/$i | git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' > $DS3
+
+				# dump all of the subjects as well
+				echo "" > $DS4
+				for j in `git rev-list --no-merges --first-parent $merge_base..HEAD`; do
+				   git format-patch --stdout $j~..$j  | \
+					git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' >> $DS4
+				done
+
+				grep -q -f $DS3 $DS4
+				if [ $? -eq 0 ]; then
+					FENCE_POST=$i
+					if [ -n "$VERBOSE" ]; then
+						echo "[NOTE] series and branch are out of sync"
+						echo "[INFO] found the top of series via subject match in the branch, autoresuming"
+					fi
 				fi
 			fi
 		done
