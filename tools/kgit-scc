@@ -502,6 +502,38 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
 		if [ $? -eq 0 ]; then
 		    outname=`basename $f .scc`
 
+		    if [ ! -z "$BLACKLIST" ]; then
+		    	echo $BLACKLIST | grep -q "$outname"
+		    	if [ $? = 0 ]; then
+		    		echo Skipping $outname, since blacklisted
+		    		continue
+		    	fi
+		    fi
+
+		    if [ ! -z "$BLACKREGEX" ]; then
+		    	echo $outname | grep -q "$BLACKREGEX"
+		    	if [ $? = 0 ]; then
+		    		echo Skipping $outname, matches blacklisted regex \"$BLACKREGEX\"
+		    		continue
+		    	fi
+		    fi
+
+		    if [ ! -z "$WHITELIST" ]; then
+		    	echo $WHITELIST | grep -q "$outname"
+		    	if [ $? != 0 ]; then
+		    		echo Skipping $outname, since not explicitly whitelisted
+		    		continue
+		    	fi
+		    fi
+
+		    if [ ! -z "$WHITEREGEX" ]; then
+		    	echo $outname | grep -q "$WHITEREGEX"
+		    	if [ $? != 0 ]; then
+		    		echo Skipping $outname - does not match whitelisted regex \"$WHITEREGEX\"
+		    		continue
+		    	fi
+		    fi
+
 		    # this is where we put 'jcount' jobs into the background
 		    echo "   [$count/$total] scc --force -o $outname-meta $repo_dir `basename $f`"
 		    (
