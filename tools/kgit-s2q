@@ -320,9 +320,16 @@ fi
 
 META=$KMETA
 if [ -z "$META" ]; then
-	META=`ls -d meta* | head -1`
+	ls -d meta* 2> /dev/null
+	if [ $? -eq 0 ]; then
+		META=`ls -d meta* | head -1`
+	fi
+	ls -d .meta* 2> /dev/null
+	if [ $? -eq 0 ]; then
+		META=`ls -d .meta* | head -1`
+	fi
 	if [ -z "$META" ]; then
-		META=meta
+		META=.meta
 	fi
 fi
 BRANCH=`get_branch`
