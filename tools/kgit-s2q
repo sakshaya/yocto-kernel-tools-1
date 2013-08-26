@@ -193,6 +193,7 @@ next_patch()
 						echo "[NOTE] series and branch are out of sync"
 						echo "[INFO] found the top of series via subject match in the branch, autoresuming"
 					fi
+					break
 				fi
 			fi
 		done
