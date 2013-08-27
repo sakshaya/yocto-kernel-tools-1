@@ -154,15 +154,23 @@ next_patch()
 		# in the series. The search can continue deeper into history, or we can flip
 		# the search. Let's take the last entry in the series, and see if its patch-id
 		# is on the branch.
+
+		# get the base commit of the branch
+		merge_base=`git merge-base HEAD master`
+		# dump all of the real commits on the branch from the head commit to the merge base
+		# get their patch IDs
+		git rev-list --no-merges --first-parent $merge_base..HEAD | xargs git show | git patch-id  | cut -f1 -d' ' > $DS2
+
+		# Dump all of the subjects as well
+		echo "" > $DS4
+		for j in `git rev-list --no-merges --first-parent $merge_base..HEAD`; do
+			git format-patch --stdout $j~..$j  | \
+				git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' >> $DS4
+		done
+
 		for i in `tac $DIR/series | grep -v -e ^# -e ^$`; do
 			# grab the patch ID
 			cat $DIR/$i | git patch-id | cut -f1 -d' ' > $DS1
-
-			# get the base commit of the branch
-			merge_base=`git merge-base HEAD master`
-			# dump all of the real commits on the branch from the head commit to the merge base
-			# get their patch IDs
-			git rev-list --no-merges --first-parent $merge_base..HEAD | xargs git show | git patch-id  | cut -f1 -d' ' > $DS2
 		    
 			# if our patch ID is in that list, then the series is completely in
 			# the branch and is out of sync. Considering warning.
@@ -178,13 +186,6 @@ next_patch()
 				# we failed to match by patch-id. In case a patch was fuzzed into the tree, double check via
 				# subject.
 				cat $DIR/$i | git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' > $DS3
-
-				# dump all of the subjects as well
-				echo "" > $DS4
-				for j in `git rev-list --no-merges --first-parent $merge_base..HEAD`; do
-				   git format-patch --stdout $j~..$j  | \
-					git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' >> $DS4
-				done
 
 				grep -q -f $DS3 $DS4
 				if [ $? -eq 0 ]; then
