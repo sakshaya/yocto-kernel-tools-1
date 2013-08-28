@@ -174,7 +174,7 @@ next_patch()
 		    
 			# if our patch ID is in that list, then the series is completely in
 			# the branch and is out of sync. Considering warning.
-			grep -q -f $DS1 $DS2
+			grep -qF -f $DS1 $DS2
 			if [ $? -eq 0 ]; then
 				FENCE_POST=$i
 				if [ -n "$VERBOSE" ]; then
@@ -187,7 +187,7 @@ next_patch()
 				# subject.
 				cat $DIR/$i | git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' > $DS3
 
-				grep -q -f $DS3 $DS4
+				grep -qF -f $DS3 $DS4
 				if [ $? -eq 0 ]; then
 					FENCE_POST=$i
 					if [ -n "$VERBOSE" ]; then
