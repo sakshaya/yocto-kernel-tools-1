@@ -582,7 +582,7 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
     done
 fi
 
-if [ -s $failed ]; then
+if [ -s "$failed" ]; then
 	echo ERROR: aborting due to meta series generation failure:
 	cat $failed
 	rm -f $failed
