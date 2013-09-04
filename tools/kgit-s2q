@@ -19,7 +19,7 @@ usage()
 {
 cat <<EOF
 
- kgit-s2q [--author <author name> ] [-n] [--patches <dir>] [-a]
+ kgit-s2q [--author <author name> ] [-n] [--patches <dir>] [-a] [-i]
           [--current] [--series] [--annotated] [--gen] [-c <count>] [-v] [-h] -- [<patch>]"
 
     --series:    dump the series file and exit
@@ -30,6 +30,7 @@ cat <<EOF
     --annotated: the series is annotated, use the annotations for auto resume
     -c:          number of commits to test when autoresuming
     -a:          autoresume series after last sucessfully applied patch
+    -i:          interactively prompt if commit information is missing
     -v:          verbose
     -n:          dry run
     -h:          help
@@ -282,6 +283,9 @@ do
 	-a)
 		AUTORESUME=1
 		;;
+	-i)
+		INTERACTIVE=1
+		;;
 	-v)
 		VERBOSE=1
 		;;
@@ -524,20 +528,25 @@ do
 			GIT_AUTHOR_NAME="$quilt_author_name";
 			GIT_AUTHOR_EMAIL="$quilt_author_email";
 		else
-			echo "No author found in $patch_name" >&2;
-			echo "---"
-			cat $tmp_msg
-			printf "Author: ";
-			read patch_author
+			if [ -z "$INTERACTIVE" ]; then
+				GIT_AUTHOR_NAME="invalid_git config"
+				GIT_AUTHOR_EMAIL="<unknown@unknown>"
+			else
+				echo "No author found in $patch_name" >&2;
+				echo "---"
+				cat $tmp_msg
+				printf "Author: ";
+				read patch_author
 
-			echo "$patch_author"
+				echo "$patch_author"
 
-			patch_author_name=$(expr "z$patch_author" : 'z\(.*[^ ]\) *<.*') &&
-			patch_author_email=$(expr "z$patch_author" : '.*<\([^>]*\)') &&
-			test '' != "$patch_author_name" &&
-			test '' != "$patch_author_email" &&
-			GIT_AUTHOR_NAME="$patch_author_name" &&
-			GIT_AUTHOR_EMAIL="$patch_author_email"
+				patch_author_name=$(expr "z$patch_author" : 'z\(.*[^ ]\) *<.*') &&
+				patch_author_email=$(expr "z$patch_author" : '.*<\([^>]*\)') &&
+				test '' != "$patch_author_name" &&
+				test '' != "$patch_author_email" &&
+				GIT_AUTHOR_NAME="$patch_author_name" &&
+				GIT_AUTHOR_EMAIL="$patch_author_email"
+			fi
 		fi
 	done
 	GIT_AUTHOR_DATE=$(sed -ne 's/Date: //p' "$tmp_info")
