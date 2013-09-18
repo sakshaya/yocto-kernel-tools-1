@@ -276,7 +276,10 @@ patch()
 }
 
 # preprocess the input files into a single large meta-script
-spp --force -o $outfile.pre $include_paths $infiles
+if [ -n "$intermediate" ]; then
+    intermediate_flags="-i"
+fi
+spp --force $intermediate_flags -o $outfile.pre $include_paths $infiles
 if [ $? -ne 0 ]; then
     err "ERROR: could not process input files: $infiles"
     exit 1

@@ -71,6 +71,9 @@ while [ $# -gt 0 ]; do
 	    -i)
 		intermediate=t
 		;;
+	    -w)
+		warn_on_missing=t
+		;;
 	    -o)
 		outfile=$2
 		shift
@@ -86,6 +89,11 @@ done
 err()
 {
     echo "$@" 1>&2
+}
+
+warn()
+{
+    err "$@"
 }
 
 # args are the input files
@@ -119,10 +127,21 @@ if [ -n "$defines" ]; then
     for v in "$vars"; do
 	# eval makes it available for this script
 	eval $v
-	# echo makes it available for other scripts
-	dump_vars=$(echo "$dump_vars"; echo export $v)
     done
 fi
+
+# used by preprocessor directives to define values, very
+# similar to the block above which processes command line
+# values. These could be unified, but it is easier to keep the
+# separate for now
+define()
+{
+    var=$1
+    value="$2"
+
+    # make the variable real
+    eval $var="\"$value\""
+}
 
 search_include_paths()
 {
@@ -338,6 +357,24 @@ process_file()
 '
 	fi
 
+	## preprocessor define
+	echo $fline | grep -q "^[[:space:]]*#define"
+	local define_ret=$?
+	if [ -z "$done" ] && [ $define_ret -eq 0 ]; then
+	    IFS=$OLDIFS
+	    local define_name=`echo $fline | cut -f2 -d' '`
+	    local define_value=`echo $fline | cut -f3 -d' '`
+	    if [ -z "$define_value" ]; then
+		define_value=t
+	    fi
+
+	    define $define_name $define_value
+
+	    IFS='
+'
+	    done=t
+	fi
+
 	## patch
  	echo $fline | grep -q -e "^[[:space:]]*patch"
 	local patch_ret=$?
@@ -392,8 +429,13 @@ process_file()
 		if [ ! -f `dirname $in`/$kconf_name ]; then
 		    local kconf_name_new=`search_include_paths $kconf_name $include_paths`
 		    if [ ! -f "$kconf_name_new" ]; then
-			err "ERROR: could not find kconf $kconf_name, included from $containing_file"
-			return 1
+			if [ -n "$lazy_filenames" ]; then
+			    warn "WARNING: could not find kconf $kconf_name, included from $containing_file"
+			    kconf_name_new=$kconf_name
+			else
+			    err "ERROR: could not find kconf $kconf_name, included from $containing_file"
+			    return 1
+			fi
 		    fi
 		    kconf_name=$kconf_name_new
 		else
