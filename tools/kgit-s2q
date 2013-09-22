@@ -603,7 +603,10 @@ do
 		tree=$(git write-tree) &&
 		commit=$( (echo "$SUBJECT"; echo; cat "$tmp_msg") | git commit-tree $tree -p $commit) &&
 		git update-ref -m "kgit-s2q: $patch_name" HEAD $commit || exit 4
-		
+
+		# also set the ORIG_HEAD, since it is used before applying patches
+	        git update-ref ORIG_HEAD HEAD
+
 		echo $DIR/$i $commit >> $REFRESH
 
 		GIT_AUTHOR_NAME=""
