@@ -135,10 +135,16 @@ fi
 # Check to see if the checkpoint branch contains a directory of the
 # same name. If it does, that's the base of what we'll capture in the
 # checkpoint. If it doesn't, fallback to the 'meta' default.
-meta_dir=meta
-git show $checkpoint_branch:$checkpoint_branch &> /dev/null
-if [ $? -eq 0 ]; then
+
+git show-ref --quiet --verify -- "refs/heads/$checkpoint_branch"
+if [ $? -eq 1 ]; then
     meta_dir=$checkpoint_branch
+else
+    meta_dir=meta
+    git show $checkpoint_branch:$checkpoint_branch &> /dev/null
+    if [ $? -eq 0 ]; then
+	meta_dir=$checkpoint_branch
+    fi
 fi
 
 if [ -z "$checkpoint_branch" ]; then
