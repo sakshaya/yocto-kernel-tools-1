@@ -207,11 +207,20 @@ if [ -n "$checkpointing" ]; then
 		exit -1
 	fi
 	if [ -f "$d/00-README" ]; then
-	    git commit -q -s -F "$d/00-README"  &> /dev/null
+	    TXT=`mktemp`
+	    echo "checkpoint dir: $d" > $TXT
+	    echo >> $TXT
+	    echo "What follows is the 00-README from dir \"$d\"." >> $TXT
+	    echo >> $TXT
+	    echo " ----------------------" >> $TXT
+	    cat $d/00-README >> $TXT
+	    echo " ----------------------" >> $TXT
+	    git commit -q -s -F $TXT  &> /dev/null
 	    if [ $? != 0 ]; then
 		echo "[ERROR]: git commit 00-README failed"
 		exit -1
 	    fi
+	    rm -f $TXT
 	else
 	    git commit -q -s -m "checkpoint dir: $d" &> /dev/null
 	    if [ $? != 0 ]; then
