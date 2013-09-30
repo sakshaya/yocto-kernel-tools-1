@@ -132,6 +132,10 @@ if [ ! -d "$dest" ] || [ -n "$force" ]; then
 		echo "[INFO] checkpointing repository"
 	    fi
 	    (cd $src; kgit checkpoint -b $checkpoint_branch -c)
+	    if [ $? != 0 ]; then
+		echo "[ERROR] checkpoint failed"
+		exit 1
+	    fi
 	    auto_checked=t
 	else
 	    if [ -z "$force" ]; then
@@ -169,6 +173,10 @@ fi
 
 if [ -n "$auto_checked" ]; then
     (cd $src; kgit checkpoint -b $checkpoint_branch -r)
+    if [ $? != 0 ]; then
+	echo "[ERROR] checkpoint restore failed"
+	exit 1
+    fi
 fi
 
 if [ -n "$force" ]; then
