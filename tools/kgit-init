@@ -358,5 +358,5 @@ fi
 
 if [ -n "$existing_repo" ]; then
     # this is an old repository, check if we should be restoring a checkpoint
-    kgit-checkpoint -r
+    kgit-checkpoint -b $meta_branch -r
 fi
