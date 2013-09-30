@@ -171,15 +171,10 @@ if [ -n "$checkpointing" ]; then
 		echo "[ERROR]: orphan branch creation failed"
 		exit -1
 	fi
-        # stage the requested files/directories
-	git rm -rfq `ls | grep -v $checkpoint_branch`
+        # remove the unwanted files/directories
+	git rm -rfq `ls -d .gitignore .mailmap * | grep -v $checkpoint_branch`
 	if [ $? != 0 ]; then
 		echo "[ERROR]: git rm -rfq failed"
-		exit -1
-	fi
-	git rm -f $checkpoint_branch/.gitignore
-	if [ $? != 0 ]; then
-		echo "[ERROR]: git rm .gitignore failed"
 		exit -1
 	fi
     else
