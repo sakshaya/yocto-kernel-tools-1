@@ -97,18 +97,19 @@ fi
 src=$1
 dest=$2
 
+meta_dir=$KMETA
+checkpoint_branch=$KMETA
+
+if [ -z "$meta_dir" ]; then
+	meta_dir=meta
+	checkpoint_branch=meta
+fi
+
 if [ ! -d "$dest" ] || [ -n "$force" ]; then
 
     if [ -d "$dest" ]; then
 	echo "[INFO] removing dest repository at $dest"
 	rm -rf "$dest"
-    fi
-
-    meta_dir=$KMETA
-    checkpoint_branch=$KMETA
-    if [ -z "$meta_dir" ]; then
-	meta_dir=meta
-	checkpoint_branch=meta
     fi
 
     if [ ! -d "$src.tmp" ]; then
@@ -167,7 +168,7 @@ if [ -d $dest ]; then
 fi
 
 if [ -n "$auto_checked" ]; then
-    (cd $src; kgit checkpoint -r)
+    (cd $src; kgit checkpoint -b $checkpoint_branch -r)
 fi
 
 if [ -n "$force" ]; then
