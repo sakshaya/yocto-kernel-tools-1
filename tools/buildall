@@ -364,6 +364,9 @@ if [ $? != 0 ]; then
 fi
 $MYPATH/kgit-checkpoint -r > /dev/null 2>&1
 
+# since we are no longer on meta branch, meta dir will be preceeded by a dot
+META_DIR=".$META_DIR"
+
 for i in `cat $META_LIST| awk '{print $4}'` ; do
 	KMACHINE=`grep $i $META_LIST | awk '{print $1}'`
 	ARCH=`grep $i $META_LIST | awk '{print $3}'`
