@@ -200,7 +200,12 @@ if [ -n "$checkpointing" ]; then
     # either we just created an orphan branch .. or it already
     # existed. Either way, iterate the directories that should be added to
     # the branch and add them.
-    for d in $dirs_to_checkpoint; do       
+    for d in $dirs_to_checkpoint; do
+	count=`git ls-files -dmo $d | wc -l`
+	if [ $count -eq 0 ]; then
+	    # if there aren't any untracked files, then there's nothing to commit
+	    continue
+	fi
 	git add -f $d
 	if [ $? != 0 ]; then
 		echo "[ERROR]: git add dirs failed"
@@ -278,7 +283,7 @@ else # restoring ...
     fi
 
     # save the old branch, and make the data untracked.
-    git checkout -q -b $checkpoint_branch-temp $checkpoint_branch
+    git checkout -q -f -b $checkpoint_branch-temp $checkpoint_branch
     if [ $? != 0 ]; then
 	echo "[ERROR]: git checkout -q -b failed"
 	exit -1
@@ -289,17 +294,32 @@ else # restoring ...
 	exit -1
     fi
 
-    # delete our working branch, and return to the original one
-    git checkout -q $current_branch
-    if [ $? != 0 ]; then
-	echo "[ERROR]: git checkout -q failed"
-	exit -1
+    # At this point, we've reset the branch and the meta data is now
+    # reset and can persist when we change the branch, but we need to
+    # make a copy of them to *something* else, or git will complain about
+    # them being clobbered when we switch away.
+    if [ ! -d ".$checkpoint_branch" ]; then
+	mv $checkpoint_branch .$checkpoint_branch
     fi
+
+    # delete our working branch, and return to the original one
+    if [ "$checkpoint_branch" != "$current_branch" ]; then
+	git checkout -f -q $current_branch
+	if [ $? != 0 ]; then
+	    echo "[ERROR]: git checkout -q failed"
+	    exit -1
+	fi
+    else
+	git checkout -f -q master
+	if [ $? != 0 ]; then
+	    echo "[ERROR]: git checkout -q failed"
+	    exit -1
+	fi
+    fi
+
     git branch -D $checkpoint_branch-temp
     if [ $? != 0 ]; then
 	echo "[ERROR]: git branch -D failed"
 	exit -1
     fi
-
-    mv $checkpoint_branch .$checkpoint_branch
 fi
