@@ -990,19 +990,19 @@ if [ -n "$_rc_file" ] && [ -e "$_rc_file" ]; then
     done
 fi
 
-meta_dir_name=$KMETA
 show_inheritance_in_branches=t
-if [ -z "$meta_dir_name" ]; then
-    meta_dir_name=meta
-fi
 
-meta_dir=`find_dir $meta_dir_name`
-if [ -z "$meta_dir" ]; then
-    meta_dir=`find_dir ".$meta_dir_name"`
-    if [ -z "$meta_dir" ]; then
-	echo "ERROR cannot locate '$meta_dir_name' directory"
-	exit 1
+# determine the meta directory name. The meta directory is at the top level
+# of the repository, and is untracked.
+meta_dir_options=`git ls-files -o --directory`
+for m in $meta_dir_options; do
+    if [ -d "$m" ]; then
+	meta_dir=`echo $m | sed 's%/%%'`
     fi
+done
+
+if [ -z "$meta_dir" ]; then
+    meta_dir=".meta"
 fi
 
 work_cfg_dir=$meta_dir/cfg

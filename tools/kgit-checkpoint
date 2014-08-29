@@ -298,8 +298,20 @@ else # restoring ...
     # reset and can persist when we change the branch, but we need to
     # make a copy of them to *something* else, or git will complain about
     # them being clobbered when we switch away.
-    if [ ! -d ".$checkpoint_branch" ]; then
-	mv $checkpoint_branch .$checkpoint_branch
+
+    if [ -d "$checkpoint_branch" ]; then
+	checkpoint_dir=$checkpoint_branch
+    else
+	for f in `find -maxdepth 1 -type d -not -name .git -and -not -name . -printf '%f'`; do
+	    if [ -d "$f" ]; then
+	        # a directory is our meta dir
+		checkpoint_dir=$f
+	    fi
+	done
+    fi
+
+    if [ ! -d ".$checkpoint_dir" ]; then
+	mv $checkpoint_dir .$checkpoint_dir
     fi
 
     # delete our working branch, and return to the original one
