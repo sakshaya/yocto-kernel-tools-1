@@ -28,6 +28,7 @@ cat <<EOF
     --patches:   directory containing the series file to use
     --current:   show top currently applied patch
     --annotated: the series is annotated, use the annotations for auto resume
+    --fuzzy:     match autoresume on fuzzy heuristics (i.e. subject only)
     -c:          number of commits to test when autoresuming
     -a:          autoresume series after last sucessfully applied patch
     -i:          interactively prompt if commit information is missing
@@ -143,11 +144,19 @@ next_patch()
 				fi
 			elif [ $i = "$MAYBE_START" ]; then
 					FENCE_POST=$i
-					if [ -n "$VERBOSE" ]; then
-						echo "[WARNING] Subject matched, but diffstat did not. Continuing anyway."
+					# fuzzy match means that we'll let a subject that maches, but not the diffstat
+					# be our fencepost. Otherwise, we keep looking.
+					if [ -n "$FUZZY_MATCH" ]; then
+						if [ -n "$VERBOSE" ]; then
+							echo "[WARNING] Subject matched, but diffstat did not. Fuzzy matching for autoresume"
+						fi
+						rm -f $DS1 $DS2 $DS3 $DS4
+						return
+					else
+						if [ -n "$VERBOSE" ]; then
+							echo "[WARNING] Subject matched, but diffstat did not, not autoresuming"
+						fi
 					fi
-					rm -f $DS1 $DS2 $DS3 $DS4
-					return
 			fi
 		done
 
@@ -299,6 +308,9 @@ do
 		;;
 	--annotated)
 		ANNOTATED_SERIES=1
+		;;
+        --fuzzy)
+		FUZZY_MATCH=1
 		;;
 	--help|-h)
 		usage
