@@ -659,7 +659,7 @@ _strip_common_prefix()
 	fi
     done
 
-    echo "$relocated_name"
+    echo "/$relocated_name"
 }
 
 do_pending_patches()
@@ -1113,7 +1113,7 @@ if [ -n "$_kconf" ]; then
 	KTGT=$KTYPE/$KMACH
 
 	# we need to build our own list of relocation directories
-	rdirs=`cat $_meta_series|grep '^# _reloc_dir' |awk '{print $3}'`
+	rdirs=`cat $_meta_series|grep '^# _reloc_dir' |awk '{printf "%s%s",$3,"/ " }'`
 
 	# if --update AND --kconf were passed, let's run the
 	# meta series but only do the config fragment migration
