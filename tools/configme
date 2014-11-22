@@ -133,6 +133,11 @@ run_board_config()
 	return 1
     fi
 
+    if [ ! -e "$META_DIR/cfg/$KTGT/config_frag.txt" ]; then
+	echo "[ERROR] No configuration fragments found, this typically is a misconfigured BSP."
+	echo "        Check that fragments (or defconfigs) are referenced by the board description."
+	return 1
+    fi
     frags=`cat $META_DIR/cfg/$KTGT/config_frag.txt | sed 's%\(^.*$\)%'$META_DIR/cfg'\1%'`
     pre_config -l $META_DIR/cfg/$KTGT/ $frags > $META_DIR/cfg/$KTGT/config.log 2>&1
     if [ $? -ne 0 ]; then
