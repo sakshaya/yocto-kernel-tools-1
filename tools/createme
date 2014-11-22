@@ -146,7 +146,13 @@ meta_dir()
 	fi
     fi
     if [ -z "$meta_dir" ]; then
-	meta_dir=`ls -d .meta* | head -1`
+	meta_dir_options=`git ls-files -o --directory`
+	for m in $meta_dir_options; do
+	    if [ -d "$m" ]; then
+		meta_dir=`echo $m | sed 's%/%%'`
+	    fi
+	done
+
 	if [ -z "$meta_dir" ]; then
 	    meta_dir=".meta"
 	fi
