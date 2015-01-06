@@ -35,7 +35,7 @@ fi
 # TREE=git://some.site.com/linux.git
 # both absolute paths and git repos are valid inputs
 if [ -z "$TREE" ]; then
-	TREE=git://git.yoctoproject.org/linux-yocto-3.4
+	TREE=git://git.yoctoproject.org/linux-yocto-3.17
 fi
 
 # Name of dir created for containing checked out src to build from
