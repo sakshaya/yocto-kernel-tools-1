@@ -85,6 +85,9 @@ MYPATH=`readlink -f $MYPATH`
 CONFIGME=`readlink -f $MYPATH/configme`
 UPDATEME=`readlink -f $MYPATH/updateme`
 
+PATH=$PATH:$MYPATH
+export PATH
+
 if [ -d $TREE ]; then
 	TREE=`readlink -f $TREE`
 fi
