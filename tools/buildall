@@ -9,10 +9,6 @@
 #	$PATH which includes the above.
 #	Proper CROSS_COMPILE (per arch) settings; see defaults below.
 
-# Optional:
-#	ccache
-#	distcc
-
 #
 # Stick all your customizations, local $PATH additions in the below.
 #
@@ -144,21 +140,6 @@ build_branch()
 		echo Error: cant find a $CROSS_COMPILE\gcc in PATH
 		echo PATH is: $PATH
 		exit 1
-	fi
-
-	# Sanity checks specific to distcc/ccache usage
-	if [ ! -z "$CCACHE_PREFIX" ]; then
-		which ccache > /dev/null 2>&1
-		if [ $? != 0 ]; then
-			echo Warning: cant find ccache in PATH
-		fi
-
-		TC_GCC=`which $CROSS_COMPILE\gcc`
-		cmp -s $TC_GCC $CCACHE
-		if [ $? != 0 ]; then
-			echo Warning: $TC_GCC doesnt point at ccache
-			echo perhaps your toolchain is ahead of ccache in your path\?
-		fi
 	fi
 
 	export ARCH
