@@ -421,7 +421,7 @@ do_update() {
 	top_tgt=`search_includes_for_defines "$KDESC"`
 
 	# check to see that a matching KMACHINE was found
-	grep -q -e "^[[:space:]]*define[[:space:]]*KMACHINE[[:space:]]*$kmachine[[:space:]]*\$" $top_tgt
+	grep -q -e "^[[:space:]]*define[[:space:]]*KMACHINE[[:space:]]*$kmachine[[:space:]]*\$" $top_tgt /dev/null
 	if [ $? -ne 0 ]; then
 	    top_tgt=""
 	fi
