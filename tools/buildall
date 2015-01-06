@@ -344,7 +344,12 @@ if [ $? != 0 ]; then
 	echo fatal: checkout of standard/base failed
 	exit 1
 fi
+
 $MYPATH/kgit-checkpoint -r > /dev/null 2>&1
+if [ $? != 0 ]; then
+	echo fatal: checkpoint restore failed
+	exit 1
+fi
 
 # since we are no longer on meta branch, meta dir will be preceeded by a dot
 META_DIR=".$META_DIR"
