@@ -485,7 +485,9 @@ for i in `cat $META_LIST| awk '{print $4}'` ; do
 		if [ ! -f $BUILD_DIR/build.log ]; then
 			mv error.log $BUILD_DIR/build.log
 		fi
-		fail_mail $i $BUILD_DIR/build.log
+		if [ ! -z "$MAILTO" ]; then
+			fail_mail $i $BUILD_DIR/build.log
+		fi
 	else
 		echo -n passed.
 		touch $BUILD_DIR/00-PASS
