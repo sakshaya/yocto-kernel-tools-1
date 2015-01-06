@@ -81,6 +81,7 @@ if [ -z "$X86_64_CROSS_COMPILE" ]; then
 fi
 
 MYPATH=`dirname $0`
+MYPATH=`readlink -f $MYPATH`
 CONFIGME=`readlink -f $MYPATH/configme`
 UPDATEME=`readlink -f $MYPATH/updateme`
 
