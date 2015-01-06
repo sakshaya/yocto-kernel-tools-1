@@ -81,8 +81,8 @@ if [ -z "$X86_64_CROSS_COMPILE" ]; then
 fi
 
 MYPATH=`dirname $0`
-CONFIGME=$MYPATH/configme
-UPDATEME=$MYPATH/updateme
+CONFIGME=`readlink -f $MYPATH/configme`
+UPDATEME=`readlink -f $MYPATH/updateme`
 
 if [ -d $TREE ]; then
 	TREE=`readlink -f $TREE`
