@@ -133,6 +133,8 @@ build_branch()
 		CROSS_COMPILE=$MIPS_CROSS_COMPILE
 	elif [ "$ARCH" == "arm" ];then
 		CROSS_COMPILE=$ARM_CROSS_COMPILE
+	elif [ "$ARCH" == "arm64" ];then
+		CROSS_COMPILE=$ARM_CROSS_COMPILE
 	else
 		echo Unknown architecture: $ARCH -- Giving up.
 		return 1
