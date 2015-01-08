@@ -410,7 +410,7 @@ for i in `cat $META_LIST| awk '{print $4}'` ; do
 		fi
 	fi
 
-	$UPDATEME -DKDESC=$KMACHINE:$KTYPE $KARCH $KMACH > updateme.log 2>&1
+	$UPDATEME -DKDESC=$KMACHINE:$KTYPE $ARCH $KMACHINE > updateme.log 2>&1
 	if [ $? != 0 ]; then
 		echo Generation of meta series from scc failed for $SCC
 		echo See updateme.log for details
