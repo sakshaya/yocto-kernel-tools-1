@@ -428,7 +428,8 @@ for i in `cat $META_LIST| awk '{print $4}'` ; do
 	BRANCH=`get_branch $METAPATH`
 	if [ -z "$BRANCH" ]; then
 		echo Cant find branch for $META
-		exit 1
+		echo Skipping it
+		continue
 	fi
 
 	git rev-parse $BRANCH > /dev/null 2>&1
@@ -437,7 +438,8 @@ for i in `cat $META_LIST| awk '{print $4}'` ; do
 		git rev-parse $BRANCH > /dev/null 2>&1
 		if [ $? != 0 ]; then
 			echo Cant find base branch \($BRANCH\) for $META
-			exit 1
+			echo Skipping it
+			continue
 		fi
 	fi
 
