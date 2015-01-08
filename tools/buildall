@@ -457,8 +457,10 @@ for i in `cat $META_LIST| awk '{print $4}'` ; do
 			echo Remove it if you want a rebuild of it from scratch
 			continue
 		else
-			echo Doing nuke-n-pave on old $i build since it previously failed.
-			rm -rf $BUILD_DIR
+			if [ -d $BUILD_DIR ]; then
+				echo Doing nuke-n-pave on old $i build since it did not pass
+				rm -rf $BUILD_DIR
+			fi
 		fi
 	else
 		if [ -d "$BUILD_DIR" ]; then
