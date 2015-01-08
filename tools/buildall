@@ -416,13 +416,14 @@ for i in `cat $META_LIST| awk '{print $4}'` ; do
 		echo See updateme.log for details
 		exit 1
 	fi
-	rm -f updateme.log
 
 	if [ ! -f $METAPATH ]; then
 		echo Cant find meta series for $i
 		echo I expected to find $METAPATH
 		exit 1
 	fi
+
+	rm -f updateme.log
 
 	BRANCH=`get_branch $METAPATH`
 	if [ -z "$BRANCH" ]; then
