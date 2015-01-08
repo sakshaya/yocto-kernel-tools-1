@@ -322,6 +322,12 @@ else
 	cd $LINUX_SRC
 fi
 
+if [ ! -d $META_DIR/cfg/kernel-cache ]; then
+	echo \"$META_DIR/cfg/kernel-cache\" does not exist in $PWD.
+	echo Cant proceed without it.
+	exit 1
+fi
+
 # Create a mapping between scc and meta series and arch
 META_LIST=`mktemp`
 for i in `grep -Rl '^define KMACHINE' $META_DIR/cfg/kernel-cache` ; do
