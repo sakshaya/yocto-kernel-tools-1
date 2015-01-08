@@ -65,11 +65,6 @@ PATH=$PATH:$POKY/build/tmp/sysroots/x86_64-linux/usr/bin/x86_64-poky-linux
 PATH=$PATH:$POKY/build/tmp/sysroots/x86_64-linux/usr/bin/mips32-poky-linux
 PATH=$PATH:$POKY/build/tmp/sysroots/x86_64-linux/usr/bin/ppc603e-poky-linux
 
-# Only enable this if you've installed & configured distcc (and ccache)
-# with suitable symlinks in e.g. $HOME/bin for all the different gcc
-# that point at /usr/bin/ccache (and increase the cache size; default=1M)
-# CCACHE_PREFIX=distcc
-
 #
 # No real need to change/customize anything below here.
 #
