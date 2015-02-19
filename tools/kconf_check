@@ -358,6 +358,9 @@ if [ -s $KCONF_DIR/specified_non_hdw.cfg ]; then
 	echo $KCONF_DIR/specified_non_hdw.cfg | sed 's=^'$LINUX_SRC'/=   ='
 	echo "   This BSP sets config options that are possibly non-hardware related."
 	echo
+
+	# keep a copy for future reporting
+	cp $KCONF_DIR/specified_non_hdw.cfg $META_DIR/nonhw_report.cfg
 fi
 
 ##########################################################################
