@@ -138,12 +138,26 @@ fi
 
 git show-ref --quiet --verify -- "refs/heads/$checkpoint_branch"
 if [ $? -eq 1 ]; then
+    if [ -n "$verbose" ]; then
+        echo "Checkpoint branch [$checkpoint_branch] does not exist, using default meta directory"
+    fi
     meta_dir=$checkpoint_branch
 else
     meta_dir=meta
     git show $checkpoint_branch:$checkpoint_branch &> /dev/null
     if [ $? -eq 0 ]; then
-	meta_dir=$checkpoint_branch
+        # determine the meta directory name. The meta directory is at the top level
+        # of the repository, and is untracked.
+        meta_dir_options=`git ls-files -o --directory`
+        for m in $meta_dir_options; do
+            if [ -d "$m" ]; then
+                meta_dir=`echo $m | sed 's%/%%'`
+            fi
+        done
+
+        if [ -z "$meta_dir" ]; then
+            meta_dir=".meta"
+        fi
     fi
 fi
 
