@@ -39,19 +39,35 @@ cat << EOF
 EOF
 }
 
-meta_dir()
+get_meta_dir()
 {
+    # if there's already a located and logged meta directory, just use that and
+    # return. Otherwise, we'll look around to see what we can find.
+    if [ -d ".metadir" ]; then
+        md=`cat .metadir`
+        echo $md
+        return
+    fi
+
     # determine the meta directory name
     meta_dir_options=`git ls-files -o --directory`
     for m in $meta_dir_options; do
-	if [ -d "$m" ]; then
-	    meta_dir=`echo $m | sed 's%/%%'`
+	if [ -d "$m/cfg" ]; then
+	    md=`echo $m | sed 's%/%%'`
 	fi
     done
+
+    # store our results where other scripts can quickly find the answer
+    if [ -n "$md" ]; then
+        echo "$md" > .metadir
+    fi
+
+    # return the directory to he caller
+    echo $md
 }
 
 meta_branch=$KMETA
-meta_dir
+meta_dir=`get_meta_dir`
 
 if [ -z "$1" ]; then
 	usage
