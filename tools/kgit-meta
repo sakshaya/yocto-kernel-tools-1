@@ -135,9 +135,6 @@ else
     active_patching=
 fi
 
-# Each BSP gets one of these in $meta/cfg/<BSP>/$fraglist
-fraglist="config_frag.txt"
-
 # yes this is a no-op for now, leaving it in in case
 # I change my mind later
 if [ -z "$verbose" ]; then
@@ -1140,71 +1137,4 @@ fi
 if [ -n "$_dump" ]; then
     ## todo. dump the meta series
     true
-fi
-
-#
-# This option (re)generates the kconfig. IMPORTANT:  This is working from
-# the files as they are found in the $meta dir now -- the do_kconf() that
-# gets run during the initial pass over from --init puts the files from
-# the kernel-cache into the $meta dir.
-#
-if [ -n "$_kconf" ]; then
-	_meta_series=$meta_dir/meta-series
-	KTYPE=`grep '_define KTYPE'    $_meta_series | head -n1 | awk '{print $4}'|sed 's/^.\(.*\).$/\1/'`
-	KMACH=`grep '_define KMACHINE' $_meta_series | head -n1 | awk '{print $4}'|sed 's/^.\(.*\).$/\1/'`
-	KTGT=$KTYPE/$KMACH
-
-	# we need to build our own list of relocation directories
-	rdirs=`cat $_meta_series|grep '^# _reloc_dir' |awk '{printf "%s%s",$3,"/ " }'`
-
-	# if --update AND --kconf were passed, let's run the
-	# meta series but only do the config fragment migration
-	if [ -n "$_update" ]; then
-	    wrap_meta_series $_meta_series "_kconf"
-	    exit 0
-	fi
-    
-	if [ -n "$verbose" ]; then
-	    echo "[INFO] collecting configs in $_meta_series "
-	fi
-
-	if [ ! -d "$meta_dir/cfg/$KTGT/" ]; then
-	    mkdir -p $meta_dir/cfg/$KTGT/
-	fi
-
-	if [ -z "$_continue" ]; then
-	    rm -f $meta_dir/cfg/$KTGT/{non_,}hdw_frags.txt
-	    rm -f $meta_dir/cfg/$KTGT/$fraglist
-	fi
-        cat $_meta_series | grep '^# _kconf' | while read entry; do
-		fragtype=`echo $entry | awk '{print $3}'`
-		fragname=`echo $entry | awk '{print $4}'`
-		reloc_frag=`_strip_common_prefix $fragname`
-
-		if [ ! -f "$fragname" ]; then
-			echo "[ERROR] frag $fragname does not exist"
-			exit 1
-		fi
-
-		if [ x$fragtype = xhardware ]; then
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/hdw_frags.txt
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/$fraglist
-		elif [ x$fragtype = xnon-hardware ]; then
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/non_hdw_frags.txt
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/$fraglist
-		elif [ x$fragtype = xrequired ]; then
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/required_frags.txt
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/$fraglist
-		elif [ x$fragtype = xoptional ]; then
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/optional_frags.txt
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/$fraglist
-		elif [ x$fragtype = xmask ]; then
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/masked_frags.txt
-		elif [ x$fragtype = xverify ]; then
-			echo "$reloc_frag" >> $meta_dir/cfg/$KTGT/verify_frags.txt
-		else
-			echo "[ERROR] type \"$fragtype\" of file \"$fragname\" is not a supported type"
-			exit 1
-		fi
-	done
 fi
