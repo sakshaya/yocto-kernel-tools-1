@@ -60,13 +60,21 @@ get_meta_dir()
     # store our results where other scripts can quickly find the answer
     if [ -n "$md" ]; then
         echo "$md" > .metadir
+    else
+        mkdir ".$meta_branch"
+        md=".$meta_branch"
+        echo ".$meta_branch" > .metadir
     fi
 
     # return the directory to he caller
     echo $md
 }
 
-meta_branch=$KMETA
+if [ -n "$KMETA" ]; then
+    meta_branch=$KMETA
+else
+    meta_branch=meta
+fi
 meta_dir=`get_meta_dir`
 
 if [ -z "$1" ]; then
