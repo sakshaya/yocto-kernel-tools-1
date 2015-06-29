@@ -504,6 +504,7 @@ do_update() {
 	    scc --force -o ../$ktgt-meta $includes $top_tgt $extra_features $addon_features
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. A meta series could not be created for $top_tgt"
+		exit 1
 	    fi
 	)
 }
