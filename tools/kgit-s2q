@@ -169,11 +169,12 @@ next_patch()
 		merge_base=`git merge-base HEAD master`
 		# dump all of the real commits on the branch from the head commit to the merge base
 		# get their patch IDs
-		git rev-list --no-merges --first-parent $merge_base..HEAD | xargs git show | git patch-id  | cut -f1 -d' ' > $DS2
+		# git rev-list --no-merges --first-parent $merge_base..HEAD | xargs git show | git patch-id  | cut -f1 -d' ' > $DS2
+		git rev-list --no-merges $merge_base..HEAD | xargs git show | git patch-id  | cut -f1 -d' ' > $DS2
 
 		# Dump all of the subjects as well
 		echo "" > $DS4
-		for j in `git rev-list --no-merges --first-parent $merge_base..HEAD`; do
+		for j in `git rev-list --no-merges $merge_base..HEAD`; do
 			git format-patch --stdout $j~..$j  | \
 				git mailinfo -b /dev/null /dev/null | grep Subject: | sed 's/Subject: *//' >> $DS4
 		done
