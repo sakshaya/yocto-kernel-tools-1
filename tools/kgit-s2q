@@ -337,20 +337,40 @@ if [ -n "$1" ]; then
 	AUTORESUME=
 fi
 
-META=$KMETA
-if [ -z "$META" ]; then
-	ls -d meta* 2> /dev/null
-	if [ $? -eq 0 ]; then
-		META=`ls -d meta* | head -1`
+
+# find the meta directory
+get_meta_dir()
+{
+    # if there's already a located and logged meta directory, just use that and
+    # return. Otherwise, we'll look around to see what we can find.
+    if [ -d ".metadir" ]; then
+        md=`cat .metadir`
+        echo $md
+        return
+    fi
+
+    # determine the meta directory name
+    meta_dir_options=`git ls-files -o --directory`
+    for m in $meta_dir_options; do
+	if [ -d "$m/cfg" ]; then
+	    md=`echo $m | sed 's%/%%'`
 	fi
-	ls -d .meta* 2> /dev/null
-	if [ $? -eq 0 ]; then
-		META=`ls -d .meta* | head -1`
-	fi
-	if [ -z "$META" ]; then
-		META=.meta
-	fi
-fi
+    done
+
+    # store our results where other scripts can quickly find the answer
+    if [ -n "$md" ]; then
+        echo "$md" > .metadir
+    else
+        mkdir ".$meta_branch"
+        md=".$meta_branch"
+        echo ".$meta_branch" > .metadir
+    fi
+
+    # return the directory to he caller
+    echo $md
+}
+
+META=`get_meta_dir`
 BRANCH=`get_branch`
 
 # Quilt Author
