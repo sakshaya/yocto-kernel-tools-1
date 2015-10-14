@@ -246,14 +246,44 @@ migrate_cfg() {
 	# check to see if a .scc file already includes the fragment
 	gen_feature=
 	if [ -n "$scc_files" ]; then
-		matches=`grep -l $b $scc_files`
+		matches=`grep -l $b $scc_files | head -n1`
 		if [ -z "$matches" ]; then
 			gen_feature=t
 		else
 			feat_name="$matches"
 		fi
+
+		# secondary check.
+		#
+		# We just found that a .scc file already includes a fragment that
+		# cam in on the command line, so we plan to force it to be applied
+		# via the "extra features".
+		#
+		# BUT
+		#
+		# If another .scc file in the same directory, or on the command line
+		# has the file we found above already listed, we are forcing a double
+		# include, and that can be a bad thing.
+		#
+		grep -q `basename $matches` $scc_files
+		if [ $? -eq 0 ]; then
+		    # we have a match, and the file that contains this fragment is
+		    # already included. So we don't generate a feature, and we don't
+		    # force this feature
+		    if [ -n "$verbose" ]; then
+			echo "migrate cfg: config `basename $c` is already included, feature generation not required"
+		    fi
+		    return
+                fi
+
+                if [ -n "$verbose" ]; then
+                    echo "migrate cfg: using feature $feat_name for config `basename $c`"
+                fi
 	else
 		gen_feature=t
+		if [ -n "$verbose" ]; then
+		    echo "migrate cfg: no includes found for config `basename $c`, generating feature"
+		fi
 	fi
 
 	if [ -n "$gen_feature" ]; then
@@ -266,7 +296,7 @@ migrate_cfg() {
 
 		feat_name="$meta_dir/cfg/scratch/obj/$dirname/$gen_feature_name"
 	fi
-	
+
 	# we've generated the feature, make sure it can be found
 	add_search_include_dir $meta_dir/cfg/scratch/obj/$dirname
 
@@ -507,6 +537,13 @@ do_update() {
 
 	# this builds and applies the meta-series
 	( cd $meta_dir/cfg/scratch/obj
+
+	    if [ -n "$verbose" ]; then
+		echo "generating meta series"
+		echo "	 features: $extra_features"
+		echo "	 addons: $addon_features"
+	    fi
+
 	    scc --force -o ../$ktgt-meta $includes $top_tgt $extra_features $addon_features
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. A meta series could not be created for $top_tgt"
