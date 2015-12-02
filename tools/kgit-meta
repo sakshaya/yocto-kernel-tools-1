@@ -1056,7 +1056,7 @@ get_meta_dir()
 {
     # if there's already a located and logged meta directory, just use that and
     # return. Otherwise, we'll look around to see what we can find.
-    if [ -d ".metadir" ]; then
+    if [ -f ".metadir" ]; then
         md=`cat .metadir`
         echo $md
         return
