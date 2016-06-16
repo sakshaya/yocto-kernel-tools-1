@@ -626,16 +626,6 @@ do_branch()
 	if [ "$vlevel" -eq 2 ]; then
 	    echo "      branch ===> $name (reuse)"
 	fi
-
-	# if we are "continuing" then we still need to process 
-	# patches one by one in the branch. If we aren't continuing
-	# take the branch existence to mean "all the patches should
-	# be in place"
-	if [ -n "$_continue" ]; then
-	    active_patching=t
-	else
-	    active_patching=
-	fi
     fi
 
     last_branch=$name
