@@ -13,22 +13,32 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #  See the GNU General Public License for more details.
 
-version="0.2"
+version="0.8"
+
+BASEDIR=$(dirname $BASH_SOURCE)
 
 usage()
 {
 cat << EOF
 
- scc [--help] [--force] [-i] [-w] [-o outfile] [-D<var>=<value>] [-I<path>] [-v] infiles
+ scc [--help] [--configs] [--force] [-i] [-w] [--cmds <comma separated list>] [-o outdir:<meta,cfg,patch>] [-D<var>=<value>] [-I<path>] [-v] infiles
 
       --help:      This message
       --force:     force overwrite output file if it already exists
+      --cmds:      list of supported commands. If not passed, all found commands are loaded,
+                   valid commands are: patch, kconf, branch, define
+      --configs:   Output the list of compiled configuration fragments (if available), -o <outdir> is
+                   used to locate the configuration options
       -D:          define <var> to <value> which will be available to sub scripts
       -I:          include path <path> will be searched for files
       -i:          leave intermediate files on failure
       -w:          only warn on missing files
       -v:          verbose output
-      -o:          outfile file for processed results. stdout is used if not passed
+      -o:          output directory and artifacts. artifacts follow the colon and ar a comma
+                   separated list of:
+                       meta:  full meta-series (patches, config, branches, etc)
+                       cfg:   configure fragment queue
+                       patch: patch queue
 
       infiles      files to preprocess, and output into outfile or stdout
 
@@ -40,6 +50,7 @@ if [ -z "$1" ]; then
 	exit 1
 fi
 
+outdir="."
 while [ $# -gt 0 ]; do
 	case "$1" in
 	    --help)
@@ -67,11 +78,33 @@ while [ $# -gt 0 ]; do
 	    --force|-f)
 		force=t
 		;;
+            --cmds)
+                cmds=$2
+                shift
+                ;;
+            --configs)
+                configs=t
+                ;;
 	    -i)
 		intermediate=t
 		;;
+            -p|--patches)
+		patches=t
+                unified=
+		;;
+            -c|--config)
+		config=t
+                unified=
+		;;
 	    -o)
-		outfile=$2
+                # the first field is the output directory
+                outdir=$(echo $2 | cut -d: -f1)
+                # the next field is the comma separated list of actions, but if it is
+                # outdir again, we have no artifacts passed .. so you get them all
+                artifacts=$(echo $2 | cut -d: -f2)
+                if [ "${artifacts}" == "${outdir}" ]; then
+                    artifacts="meta,patch,cfg"
+                fi
 		shift
 		;;
 	    -v) verbose=t
@@ -91,16 +124,21 @@ err()
 infiles=$@
 shift
 
+# If --configs was passed, we dump the current queue and exit
+if [ -n "${configs}" ]; then
+    if [ ! -f "${outdir}/config.queue" ]; then
+        echo "[ERROR]: no configuration queue found in outdir (${outdir})"
+        usage
+        exit 1
+    else
+        cat ${outdir}/config.queue | sed "s%^%${outdir}/%g" | sed 's%#.*$%%g' | tr '\n' ' '
+        exit 0
+    fi
+fi
+
 if [ -z "$infiles" ]; then
     err "ERROR: a input file must be supplied"
     exit 1
-else
-    for f in $infiles; do
-	if [ ! -f "$f" ]; then
-	    err "ERROR. input file \"$f\" does not exist"
-	    exit 1
-	fi
-    done
 fi
 if [ -n "$outfile" ] && [ -f "$outfile" ]; then
     if [ -z "$force" ]; then
@@ -132,54 +170,86 @@ header()
     echo "#"
 }
 
-
-# used by feature scripts. call this to set a variable
-# in the preamble of a created executable. subscripts
-# can use these values to make decisions
-define()
-{
-    var=$1
-    value="$2"
-
-    # make the variable real
-    eval $var="\"$value\""
-
-    echo "# _define $var '$value'"
-}
-
-# used in feature scripts
-#  - associates a kernel config frag with the feature
-kconf()
-{
-    type=$1
-    frag=$2
-    flags=$3
-
-    echo "# _kconf $type $frag"
-}
-
-mark()
-{
-    text="$@"
-
-    echo "# _mark $text"
-}
-
 reloc_dir()
 {
     dir=$1
-    
+
     echo "# _reloc_dir $dir"
+}
+
+prefix()
+{
+    prefix=$1
+}
+
+# override function takes the name of an already defined function and saves it
+# as "<foo>_old" (or save_name if passed), and then declares a stub function of
+# the original function name to inhibit any future calls to that function.
+override_function()
+{
+    orig=$1
+    save_name=$2
+
+    if [ -z "$save_name" ]; then
+        save_name=old_$1
+    fi
+
+    local ORIG_FUNC=$(declare -f $orig)
+    if [ -n "${ORIG_FUNC}" ]; then
+        local NEWNAME_FUNC="$save_name${ORIG_FUNC#$orig}"
+        eval "$NEWNAME_FUNC"
+        # create the override function
+        o="$orig () { true; }"
+        eval "${o}"
+    fi
 }
 
 process_file()
 {
     local in=$1
-    local containing_file=$2
     local ret=0
     local done=""
 
-    . $in
+    # source the file, but clear the path, since we only want commands
+    # that we declare as valid to run
+    (
+        # find the path of valid, external commands. The implementation is available
+        # in the command file "auto.cmd", which is always loaded
+        basename=$(which basename)
+        dirname=$(which dirname)
+        mkdir=$(which mkdir)
+        cp=$(which cp)
+        sed=$(which sed)
+
+        # load the commands. We load them all, and then check to see if we
+        # should override a specific command to our "do nothing function"
+        for c in ${all_cmds}; do
+            if [ -n "${verbose}" ]; then
+                echo "[INFO]: sourcing command: $c"
+            fi
+            source $c
+        done
+
+        for z in ${cmds_to_override}; do
+            if [ -n "${verbose}" ]; then
+                echo "[INFO]: disabling command: $z"
+            fi
+            override_function $(basename "$z" .cmd)
+        done
+
+        unset PATH
+        if [ -n "${verbose}" ]; then
+            eval . $in $outfile_append
+        else
+            # hide stderr if we aren't verbose
+            eval . $in $outfile_append 2> /dev/null
+        fi
+
+        if [ $? -ne 0 ]; then
+            echo "[ERROR]: processing of file $in failed"
+            exit 1
+        fi
+    )
 
     return 0
 }
@@ -212,82 +282,104 @@ git()
 }
 
 # used in feature scripts
-#    arg1: the branch name
-#    arg2: the source branch name
-#    arg3 and up: flags
-branch()
-{
-    echo "# _branch_begin $@"
-}
-
-
-# used in feature scripts
-#   arg1: parent branch
-#   arg2: branch name
-scc_leaf()
-{
-    # do not use
-    true
-}
-
-# patch triggers are no longer supported. In a git context, they need
-# to trigger dynamic branching, which is complex and can end up with
-# the system not building the branch with the proper changes.
-patch_trigger()
-{
-    true
-}
-
-# ctx mods are no longer supported. In a git context, they need
-# to trigger dynamic branching, which is complex and can end up with
-# the system not building the branch with the proper changes.
-do_ctx_mod()
-{
-    true
-}
-
-# exclusions are no longer supported. In a git context, they need
-# to trigger dynamic branching, which is complex and can end up with
-# the system not building the branch with the proper changes.
-do_exclude()
-{
-    true
-}
-
-# used in feature scripts
 # arg1: the tag name
 tag()
 {
     echo "# _git tag $1"
 }
 
-# used in feature scripts
-patch()
-{
-    this_patch=$1
-    patch_type=$2 # not currently used
-    
-    echo "# _patch $this_patch"
-}
-
 # preprocess the input files into a single large meta-script
 if [ -n "$intermediate" ]; then
     intermediate_flags="-i"
 fi
-spp --force $intermediate_flags -o $outfile.pre $include_paths $infiles
+
+pre_processed_file="$outfile.pre"
+if [ -z "$outfile" ]; then
+    pre_processed_file="$(mktemp)"
+fi
+
+# preprocess the files. This does things like make paths absolute, checks for
+# errors, etc.
+spp --force $intermediate_flags -o $pre_processed_file $include_paths $infiles
 if [ $? -ne 0 ]; then
     err "ERROR: could not process input files: $infiles"
+    err "       See ${pre_processed_file} for details"
     exit 1
 fi
 
-# process the meta-script into a meta-series 
-header > $outfile
-process_file $outfile.pre $outfile.pre >> $outfile
+# load commands
+all_cmds=""
+cmds=$(echo ${cmds} | sed 's/,/ /g')
+for cmd in ${BASEDIR}/scc-cmds/*.cmd; do
+    valid=
+    if [ -n "${cmds}" ]; then
+        # check the cmd against the command line listed ones
+        check_cmd=$(basename "$cmd" .cmd)
+        echo $cmds | grep -q -w $check_cmd
+        if [ $? -eq 0 ]; then
+            # the command is in the valid list
+            valid=t
+        fi
+        # we always load "auto.cmd"
+        if [ "$check_cmd" == "auto" ]; then
+            valid=t
+        fi
+    else
+        valid=t
+    fi
+
+    if [ -n "${valid}" ]; then
+        if [ -n "${verbose}" ]; then
+            echo "[INFO]: loaded $cmd" >&2
+        fi
+        cmds_to_source="${cmds_to_source} $cmd"
+    else
+        cmds_to_override="${cmds_to_override} $cmd"
+    fi
+
+    all_cmds="${all_cmds} $cmd"
+done
+
+# what artifacts need to be produced ?
+#
+# We can process the inputs into:
+#    patch.queue
+#    config.queue
+#    meta-series (all commands)
+
+# meta is the entire meta series, so we set up a redirect
+echo ${artifacts} | grep -w -q meta
+if [ $? -eq 0 ]; then
+    outfile="${outdir}/meta-series"
+    outfile_append=">> $outfile"
+    outfile_start="> $outfile"
+fi
+
+# And we optionally set up pointers to a patch and config.queue
+configqueue="/dev/null"
+patchqueue="/dev/null"
+
+echo ${artifacts} | grep -w -q cfg
+if [ $? -eq 0 ]; then
+    configqueue="${outdir}/config.queue"
+    rm -f "${configqueue}"
+fi
+echo ${artifacts} | grep -w -q patch
+if [ $? -eq 0 ]; then
+    patchqueue="${outdir}/patch.queue"
+    rm -f "${outdir}"/patch*.queue
+fi
+
+eval header $outfile_start
+
+process_file ${pre_processed_file}
 ret=$?
 if [ $ret -ne 0 ]; then
     if [ -z "$intermediate" ]; then
-	rm -f $outfile
-	rm -f $outfile.pre
+        if [ -n "$outfile" ]; then
+	    rm -f $outfile
+        fi
+	rm -f ${pre_processed_file}
     fi
 fi
 
