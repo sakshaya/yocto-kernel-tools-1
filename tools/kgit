@@ -2,7 +2,7 @@
 
 #  (kgit), (mux and demux for kgit* tools)
 
-#  Copyright (c) 2008-2012 Wind River Systems, Inc.
+#  Copyright (c) 2008-2016 Wind River Systems, Inc.
 
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License version 2 as
@@ -30,10 +30,42 @@ cat <<EOF
 
  kgit -h --version <command>
 
-   -h :  this message
-   -v :  version
+   --meta  :  print the meta directory name
+   -h      :  this message
+   -v      :  version
 
 EOF
+}
+
+meta_dir()
+{
+    # if there's already a located and logged meta directory, just use that and
+    # return. Otherwise, we'll look around to see what we can find.
+    if [ -f ".metadir" ]; then
+        md=`cat .metadir`
+        echo $md
+        return
+    fi
+
+    # determine the meta directory name
+    meta_dir_options=`git ls-files -o --directory`
+    for m in $meta_dir_options; do
+        if [ -d "$m/cfg" ]; then
+            md=`echo $m | sed 's%/%%'`
+        fi
+    done
+
+    # if nothing was found, we create the minimal structure
+    if [ -z "$md" ]; then
+        md=".kernel-meta"
+    fi
+
+    mkdir -p "${md}/cfg/scratch"
+
+    # store our results where other scripts can quickly find the answer
+    echo "${md}" > .metadir
+    # return the directory to he caller
+    echo $md
 }
 
 _commands()
@@ -42,12 +74,58 @@ _commands()
                   -perm -111 | sed -e "s/.*\\/`basename $0`-//"
 }
 
+# take the entire command into an array
+raw_command=($@)
+
+non_dashed=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -v) verbose=t
+            ;;
+        --meta)
+            if [ -z "${non_dashed}" ]; then
+                meta=t
+                meta_dir
+                exit 0
+            fi
+            ;;
+        -h|--help)
+            if [ -z "${non_dashed}" ]; then
+                usage
+                exit
+            fi
+            ;;
+        --*)
+            # if the next argument is dashed, we just add $1 to our collection
+            # of dashed arguments. If $2 is NOT dashed, we assume it is a parameter
+            # to the --dashed option, and we grab it as well. Don't try and mix
+            # dashed and non-dashed, since we'll grab them!
+            case $2 in
+                --*)
+                    dashed="${dashed} $1"
+                    ;;
+                *)
+                    # sneak a : in between, so we can split it later
+                    dashed="${dashed} $1:$2"
+                    shift
+                    ;;
+            esac
+            ;;
+        *) non_dashed="${non_dashed} $1"
+           ;;
+    esac
+    shift
+done
+
 # based off guilt's demux and other references
 if [ "`basename $0`" = "kgit" ]; then
+    # make an array from whatever was non-dashed
+    cmd_options_non_dashed=(${non_dashed})
+
     cmd=
-    if [ $# -ne 0 ]; then
+    if [ ${#cmd_options_non_dashed[@]} -ne 0 ]; then
         # take first arg, and try to execute it
-        arg="$1"
+        arg="${cmd_options_non_dashed[0]}"
         dir=`dirname $0`
 
         if [ -x "$dir/kgit-$arg" ]; then
@@ -65,8 +143,10 @@ if [ "`basename $0`" = "kgit" ]; then
             done
         fi
         if [ -n "$cmd" ]; then
-            shift
-            exec "$dir/kgit-$cmd" "$@"
+            # remove the first element, since that is our command. The rest are what
+            # we pass to the sub command.
+            sub_cmd_options=("${raw_command[@]:1}")
+            exec "$dir/kgit-$cmd" "${sub_cmd_options[@]}"
 
             # this is not reached because of the exec
             die "Exec failed! Something is terribly wrong!"
