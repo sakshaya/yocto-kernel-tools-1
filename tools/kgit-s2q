@@ -9,7 +9,7 @@
 #    - git quilt-import
 #    - guilt (helper routines)
 #
-# Copyright 2013 Bruce Ashfield
+# Copyright 2013-2016 Bruce Ashfield
 #
 # Licensed under the GPLv2 only.
 #
@@ -19,7 +19,7 @@ usage()
 {
 cat <<EOF
 
- kgit-s2q [--author <author name> ] [-n] [--patches <dir>] [-a] [-i]
+ kgit-s2q [--author <author name> ] [-n] [--patches <dir>] [-a] [-i] [-f]
           [--current] [--series] [--annotated] [--gen] [-c <count>] [-v] [-h] -- [<patch>]"
 
     --series:    dump the series file and exit
@@ -34,6 +34,7 @@ cat <<EOF
     -i:          interactively prompt if commit information is missing
     -v:          verbose
     -n:          dry run
+    -f:          force the first patch of the series as the starting point
     -h:          help
 
     --:          marks the end of options on the command line
@@ -300,6 +301,9 @@ do
 	-v)
 		VERBOSE=1
 		;;
+	-f)
+		FORCE=1
+		;;
 	--gen)
 		;;
 	--series)
@@ -483,7 +487,16 @@ APPLIED=0
 # Find the intial commit
 commit=$(git rev-parse HEAD)
 
-for i in `cat $SERIES | grep '^[a-zA-Z0-9_]'`
+if [ -z "${START}" ]; then
+    if  [ -f "$GIT_DIR/kgit-s2q.last" ]; then
+        if [ -z "$FORCE" ]; then
+            FENCE_POST=`cat $GIT_DIR/kgit-s2q.last`
+            echo "[INFO]: fence post found, starting after: ${FENCE_POST}"
+        fi
+    fi
+fi
+
+for i in `cat $SERIES | grep '^[a-zA-Z0-9_/]'`
 do
 	APPLIED=$[$APPLIED+1]
 
@@ -516,7 +529,7 @@ do
 	fi
 
 	if [ ! -f "$DIR/$i" ];then
-		echo "[ERROR]: patch $DIR/$i doesnt exist"
+		echo "[ERROR]: patch $DIR/$i doesn't exist"
 		exit 1
 	fi
 
@@ -532,12 +545,17 @@ do
 		if [ $? = 0 ]; then
 			commit=$(git rev-parse HEAD)
 			echo $DIR/$i $commit >> $REFRESH
+
+			# store the last applied patch so we can resume later
+			echo $i > $GIT_DIR/kgit-s2q.last
 			continue
 		fi
 		git am --abort > /dev/null 2>&1
 		echo "[INFO]: Context reduced git-am of $DIR/$i with \"git am\" did not work, trying \"apply\"."
 	else
 		commit=$(git rev-parse HEAD)
+		# store the last applied patch so we can resume later
+		echo $i > $GIT_DIR/kgit-s2q.last
 		continue
 	fi
 
@@ -648,6 +666,9 @@ do
 		GIT_AUTHOR_DATE=""
 		SUBJECT=""
 	fi
+
+	# store the last applied patch so we can resume later
+	echo $i > $GIT_DIR/kgit-s2q.last
 done
 
 # if we've failed to locate $FENCE_POST in the series, and
