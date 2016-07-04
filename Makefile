@@ -1,8 +1,9 @@
-kern_tools_LIST = kgit kgit-init kgit-meta \
-		  kgit-checkpoint kgit-clean \
-		  kconf_check configme \
-		  createme updateme patchme get_defconfig scc \
-		  pre_config merge_config.sh spp kgit-s2q
+kern_tools_LIST = kgit kgit-meta \
+		  kconf_check \
+		  get_defconfig scc \
+		  merge_config.sh spp kgit-s2q
+
+cmds := $(wildcard tools/scc-cmds/*)
 
 INSTALL=install
 RM=rm
@@ -18,6 +19,9 @@ define echo_action
                    \n$1: $2 \
                    \n-------------------------------------------------------"; \
     fi
+endef
+define install_cmd
+	$(INSTALL) -m 0755 $(1) $(DESTDIR)/scc-cmds/;
 endef
 define install_tool
 	$(INSTALL) -m 0755 tools/$(1) $(DESTDIR);
@@ -38,6 +42,8 @@ install:
 	@$(call echo_action,Install,kern_tools)
 	@$(INSTALL) -d $(DESTDIR)
 	@$(foreach tool,$(kern_tools_LIST),$(call install_tool,$(tool)))
+	@$(INSTALL) -d $(DESTDIR)/scc-cmds/
+	@$(foreach cmd,$(cmds),$(call install_cmd,$(cmd)))
 	@$(MAKE_STAMP)
 
 clean:
