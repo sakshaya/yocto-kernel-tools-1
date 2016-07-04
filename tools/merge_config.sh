@@ -20,25 +20,22 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #  See the GNU General Public License for more details.
 
+clean_up() {
+	rm -f $TMP_FILE
+	exit
+}
+trap clean_up HUP INT TERM
+
 usage() {
 	echo "Usage: $0 [OPTIONS] [CONFIG [...]]"
 	echo "  -h    display this help text"
 	echo "  -m    only merge the fragments, do not execute the make command"
 	echo "  -n    use allnoconfig instead of alldefconfig"
-	echo "  -d    debug. Don't cleanup temporary files"
 	echo "  -r    list redundant entries when merging fragments"
-	echo "  -O    dir to put generated output files"
+	echo "  -O    dir to put generated output files.  Consider setting \$KCONFIG_CONFIG instead."
 }
 
-clean_up() {
-	rm -f $TMP_FILE
-	exit
-}
-if [ -z "$DEBUG" ]; then
-	trap clean_up HUP INT TERM
-fi
-
-MAKE_FLAG=true
+RUNMAKE=true
 ALLTARGET=alldefconfig
 WARNREDUN=false
 OUTPUT=.
@@ -51,12 +48,7 @@ while true; do
 		continue
 		;;
 	"-m")
-		MAKE_FLAG=false
-		shift
-		continue
-		;;
-	"-d")
-		DEBUG=true
+		RUNMAKE=false
 		shift
 		continue
 		;;
@@ -85,76 +77,88 @@ while true; do
 	esac
 done
 
+if [ "$#" -lt 1 ] ; then
+	usage
+	exit
+fi
+
+if [ -z "$KCONFIG_CONFIG" ]; then
+	if [ "$OUTPUT" != . ]; then
+		KCONFIG_CONFIG=$(readlink -m -- "$OUTPUT/.config")
+	else
+		KCONFIG_CONFIG=.config
+	fi
+fi
+
 INITFILE=$1
 shift;
 
-# There are two variables that impact where the .config will be dropped, 
-# O= and KBUILD_OUTPUT=. So we'll respect those variables and use them as
-# an output directory as well. These two variables are not propagating
-# automatically to the kernel build, so always explicitly setting O=
-# and passing it to the kernel build ensures that it is respected.
-if [ "$OUTPUT" = "." ]; then
-	if [ -n "$KBUILD_OUTPUT" ]; then
-		OUTPUT=$KBUILD_OUTPUT
-	fi
-	if [ -n "$O" ]; then
-		OUTPUT=$O
-	fi
+if [ ! -r "$INITFILE" ]; then
+	echo "The base file '$INITFILE' does not exist.  Exit." >&2
+	exit 1
 fi
 
 MERGE_LIST=$*
 SED_CONFIG_EXP="s/^\(# \)\{0,1\}\(CONFIG_[a-zA-Z0-9_]*\)[= ].*/\2/p"
-TMP_FILE=$(mktemp $OUTPUT/.tmp.config.XXXXXXXXXX)
+TMP_FILE=$(mktemp ./.tmp.config.XXXXXXXXXX)
 
 echo "Using $INITFILE as base"
 cat $INITFILE > $TMP_FILE
 
-# Merge files, printing warnings on overrided values
+# Merge files, printing warnings on overridden values
 for MERGE_FILE in $MERGE_LIST ; do
 	echo "Merging $MERGE_FILE"
+	if [ ! -r "$MERGE_FILE" ]; then
+		echo "The merge file '$MERGE_FILE' does not exist.  Exit." >&2
+		exit 1
+	fi
 	CFG_LIST=$(sed -n "$SED_CONFIG_EXP" $MERGE_FILE)
 
 	for CFG in $CFG_LIST ; do
-		grep -q -w $CFG $TMP_FILE
-		if [ $? -eq 0 ] ; then
-			PREV_VAL=$(grep -w $CFG $TMP_FILE)
-			NEW_VAL=$(grep -w $CFG $MERGE_FILE)
-			if [ "x$PREV_VAL" != "x$NEW_VAL" ] ; then
+		grep -q -w $CFG $TMP_FILE || continue
+		PREV_VAL=$(grep -w $CFG $TMP_FILE)
+		NEW_VAL=$(grep -w $CFG $MERGE_FILE)
+		if [ "x$PREV_VAL" != "x$NEW_VAL" ] ; then
 			echo Value of $CFG is redefined by fragment $MERGE_FILE:
 			echo Previous  value: $PREV_VAL
 			echo New value:       $NEW_VAL
 			echo
-			elif [ "$WARNREDUN" = "true" ]; then
+		elif [ "$WARNREDUN" = "true" ]; then
 			echo Value of $CFG is redundant by fragment $MERGE_FILE:
-			fi
-			sed -i "/$CFG[ =]/d" $TMP_FILE
 		fi
+		sed -i "/$CFG[ =]/d" $TMP_FILE
 	done
 	cat $MERGE_FILE >> $TMP_FILE
 done
 
-if [ "$MAKE_FLAG" = "false" ]; then
-	cp $TMP_FILE $OUTPUT/.config
+if [ "$RUNMAKE" = "false" ]; then
+	cp -T -- "$TMP_FILE" "$KCONFIG_CONFIG"
 	echo "#"
-	echo "# merged configuration written to $OUTPUT/.config (needs make)"
+	echo "# merged configuration written to $KCONFIG_CONFIG (needs make)"
 	echo "#"
-	if [ -z "$DEBUG" ]; then
-		clean_up
-	fi
+	clean_up
 	exit
 fi
+
+# If we have an output dir, setup the O= argument, otherwise leave
+# it blank, since O=. will create an unnecessary ./source softlink
+OUTPUT_ARG=""
+if [ "$OUTPUT" != "." ] ; then
+	OUTPUT_ARG="O=$OUTPUT"
+fi
+
 
 # Use the merged file as the starting point for:
 # alldefconfig: Fills in any missing symbols with Kconfig default
 # allnoconfig: Fills in any missing symbols with # CONFIG_* is not set
-make KCONFIG_ALLCONFIG=$TMP_FILE O=$OUTPUT $ALLTARGET
+make KCONFIG_ALLCONFIG=$TMP_FILE $OUTPUT_ARG $ALLTARGET
 
 
 # Check all specified config values took (might have missed-dependency issues)
 for CFG in $(sed -n "$SED_CONFIG_EXP" $TMP_FILE); do
 
 	REQUESTED_VAL=$(grep -w -e "$CFG" $TMP_FILE)
-	ACTUAL_VAL=$(grep -w -e "$CFG" $OUTPUT/.config)
+	ACTUAL_VAL=$(grep -w -e "$CFG" "$KCONFIG_CONFIG")
 	if [ "x$REQUESTED_VAL" != "x$ACTUAL_VAL" ] ; then
 		echo "Value requested for $CFG not in final .config"
 		echo "Requested value:  $REQUESTED_VAL"
@@ -163,6 +167,4 @@ for CFG in $(sed -n "$SED_CONFIG_EXP" $TMP_FILE); do
 	fi
 done
 
-if [ -z "$DEBUG" ]; then
-	clean_up
-fi
+clean_up
