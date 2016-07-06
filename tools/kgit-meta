@@ -28,38 +28,18 @@ then
   mypath="."
 fi
 full_path=$(dirname $(readlink -f $0));
-export guilt_dont_check_index=t
 
 usage()
 {
 cat <<EOF
 
- kgit-meta [--init] [--kconf] [--apply|--patch] [--continue]
-           [--update] [--rc=<file>] [--stop_at=<patch>] [--skip=<patch>] 
-           [--gen] [--dump] [-v] [-h] <meta-series>
+ kgit-meta [--resume] [-v] [-h] <meta-series>
 
-   <meta-series>: required if --apply or --kconf or --patch is used
+   Uses meta-series <meta-series> to create a git repository
 
-     --init: initialize the repository for application of the meta
-             series
-     --kconf: run the kernel configuration portion of the meta series         
-     --apply: apply patches found in the meta series. This also runs
-              any git commands found in the series.
-     --continue: continue applying patches from the meta series. Used
-                 after a failure. Note: this also prevents skipping of
-                 patches simply because a branch exist
-
-     --stop_at: during application stop at a particular patch
-     --update: depending on the action, this triggers additional 
-               processing. --kconf --update will trigger an update
-               of all the fragments in the repo AND setup the 
-               fragment processing.
-     --gen: a git tree is being generated from a meta data respository,
-            ensure that all patches are validated.
-     --skip: during application, skip a particular patch
-
-   -h: help
-   -v: verbose
+   --resume: resume processing, even if branches exist
+   -h      : help
+   -v      : verbose
 
 EOF
 }
@@ -68,54 +48,27 @@ EOF
 vlevel=0
 while [ $# -gt 0 ]; do
     case "$1" in
-	-a|--apply|-p|--patch)
-		_patch_apply=t
-		;;
-	-i|--init)
-		_init=t
-		;;
-	-d|--dump)
-		_dump=t
-		;;
-	-u|--update)
-		_update=t
-		;;
-	-c|--continue)
-		_continue=t
-		_single_step=t
-		;;
-	-stop_at|--stop_at)
-		_stop_at=$2
-		shift
-		;;
-	--skip)
-		_skip=$2
-		shift
-		;;
-	--gen)
-		treegen=t
-		;;
 	-f|--force)
-		_force=t
-		;;
-	-k|--kconf)
-		_kconf=t
-		;;
+	    _force=t
+	    ;;
+        -r|--resume)
+	    resume=t
+	    ;;
 	-rc|--rc)
-		_rc_file=$2
-                shift
-		;;
+	    _rc_file=$2
+            shift
+	    ;;
 	-v|--v)
-		verbose=t
-		vlevel=`expr $vlevel + 1`
-		;;
+	    verbose=t
+	    vlevel=`expr $vlevel + 1`
+	    ;;
 	-h|--h|--help) 
-	        usage
-                exit;
-                ;;
+	    usage
+            exit;
+            ;;
 	*)
-	        break
-		;;
+	    break
+	    ;;
     esac
     shift
 done
@@ -125,18 +78,16 @@ if [ ! $# -gt 0 ]; then
     exit
 fi
 
+meta_series=$1
+if [ ! -e "$meta_series" ]; then
+    echo "ERROR. meta series '$meta_series' does not exist..."
+    exit 1
+fi
+
+
 path=`dirname $0`
 . $path/kgit
 
-
-if [ -n "$_continue" ]; then
-    active_patching=t
-else
-    active_patching=
-fi
-
-# yes this is a no-op for now, leaving it in in case
-# I change my mind later
 if [ -z "$verbose" ]; then
     _redir="> /dev/null"
 else
@@ -145,12 +96,6 @@ else
     else
 	_redir="> /dev/null"	
     fi
-fi
-
-_meta_series=$1
-if [ -n "$_patch_apply" ] && [ ! -e "$_meta_series" ]; then
-    echo "ERROR. meta series '$_meta_series' does not exist..."
-    exit 1
 fi
 
 progress_increment()
@@ -204,821 +149,6 @@ progress_done()
     echo -e "]  (completed $extra_message)                    "
 }
 
-
-# arg1: tag name
-# arg2: message (if present an annotated tag is done)
-do_tag()
-{
-    tag_name="$1"
-    tag_msg="$2"
-
-    git show-ref -q $tag_name
-    if [ $? -eq 1 ]; then
-        if [ "$vlevel" -eq 2 ]; then
-	    echo "      * issuing: git tag $tag_name"
-	fi
-	
-	if [ -n "$tag_msg" ]; then
-	    git tag -a -m "$tag_msg" "$tag_name"
-	else
-	    git tag "$tag_name"
-	fi
-    fi
-}
-
-# allows git commands to be undone
-_git_undo()
-{
-    _type=$1
-    shift
-    _args=$@
-
-    case $_type in
-	tag) if [ -e .git/refs/tags/$_args ]; then
-	        echo "[INFO] executing: git $_type -d $_args"
-	        git $_type -d $_args
-             fi 
-           ;;
-	*) echo "[INFO] executing: git $_type $_args"
-           # git $_type $_args 
-           ;;
-    esac
-}
-
-get_hooks()
-{
-    meta_file=$1
-
-old_ifs=$IFS
-IFS='
-'
-    for h in `grep '# _hook' $1`; do
-	phase=`echo $h | cut -d' ' -f3`
-	hook=`echo $h | cut -d' ' -f4`
-
-	_hook_file_dir=`dirname $hook`
-	_hook_file_name=`basename $hook`
-
-	if [ -e $_hook_file_dir/$_hook_file_name ]; then
-	    cp -f $_hook_file_dir/$_hook_file_name $hook_dir
-	    case $phase in
-		prepatch)
-		    prepatch_scripts="$prepatch_scripts $_hook_file_name"
-		    ;;
-		postpatch)
-		    postpatch_scripts="$postpatch_scripts $_hook_file_name"
-		    ;;
-	    esac
-	else
-	    echo "WARNING: hook $_hook_file_dir/$_hook_file_name not found"
-	fi
-    done
-IFS=$old_ifs
-}
-
-track_patch()
-{
-    patch_name=$1
-    echo "$patch_name" >> $meta_dir/cfg/master_series
-}
-
-# returns 1 if the patch is already tracked, 0 if it isn't
-check_for_tracked_patch()
-{
-    local_name=$1
-    status_file=$2
-    retval=1
-
-    if [ -n "$status_file" ] && [ -e $status_file ]; then
-        grep -q $local_name $status_file
-	if [ $? -ne 0 ]; then
-	    # patch isn't already in the status. push
-	    retval=0
-	fi
-    else
-	touch $status_file
-	retval=0
-    fi
-
-    if [ -e "$meta_dir/cfg/master_series" ]; then
-	grep -q $local_name $meta_dir/cfg/master_series
-	if [ $? -ne 0 ]; then
-	    retval=0
-	fi
-    fi
-
-    return $retval
-}
-
-track_branch()
-{
-    branch_name=$1
-    
-    if [ -n "$branch_name" ]; then
-	head_commit=`git show-ref -h -s | head -1`
-	echo "$branch_name:$head_commit" >> $meta_dir/cfg/branch_status
-    fi
-}
-
-# this is responsible for migrating the data from the kernel-cache layer
-# into the $meta dir. That is it -- no processing takes place here.
-do_kconf()
-{
-    local _cfg_file_dir=`dirname $1`
-    local _cfg_file_name=`basename $1`
-
-    local kconf_files="hardware.kcf non-hardware.kcf hardware.cfg non-hardware.cfg required.cfg optional.cfg"
-
-    _reloc_cfg_file_dir=`_strip_common_prefix $_cfg_file_dir`
-    if [ -d "$_cfg_file_dir" ]; then
-	mkdir -p $work_cfg_dir/$_reloc_cfg_file_dir
-
-	if [ ! $_cfg_file_dir/$_cfg_file_name -ef \
-               $work_cfg_dir/$_reloc_cfg_file_dir/$_cfg_file_name ]; then
-	    if [ -f $_cfg_file_dir/$_cfg_file_name ]; then
-	        cp $_cfg_file_dir/$_cfg_file_name $work_cfg_dir/$_reloc_cfg_file_dir/
-	    fi
-	fi
-
-        # We may run this loop more than 1x since a feature dir can validly
-        # have more than one _kconf specified. Hence the "cp -f"
-	for file in $kconf_files
-	do
-	    if [ -f $_cfg_file_dir/$file ]; then
-		if [ ! $_cfg_file_dir/$file -ef \
-		     $work_cfg_dir/$_reloc_cfg_file_dir/$file ]; then
-                    if [ -f $_cfg_file_dir/$_cfg_file_name ]; then
-		       cp -f $_cfg_file_dir/$file \
-			   $work_cfg_dir/$_reloc_cfg_file_dir/
-                    fi
-		fi
-	    fi
-	done
-    fi
-}
-
-# this is a wrapper around any embedded rc file comments
-do_cfg()
-{
-    local _cfg_file_dir=$1
-
-    if [ -d "$_cfg_file_dir" ]; then
-	reloc_dir=`_strip_common_prefix $_cfg_file_dir`
-	if [ ! -d "$work_cfg_dir/$reloc_dir" ]; then
-	    mkdir -p $work_cfg_dir/$reloc_dir
-	fi
-	if [ ! $_cfg_file_dir -ef $work_cfg_dir/$reloc_dir ]; then
-	    cp -u $_cfg_file_dir/*.scc $work_cfg_dir/$reloc_dir
-	fi
-    fi
-}
-
-# arg1: the name the caller would like
-# arg2: should anyone inehrit this branch? (t/f)
-# arg3: the current / parent branch (optional)
-generate_branch_name()
-{
-    suggested_name=$1
-    noinherit=$2
-    last_passed_branch=$3
-
-    all_possible_branches=`cat $meta_dir/meta-series | grep -E "^# _branch_begin" \
-                             | sed 's/^# _branch_begin //' | awk '{ print $1 }'`
-    who_is_last_branch=`echo "$all_possible_branches" | tail -1`
-
-    if [ -n "$show_inheritance_in_branches" ]; then
-   	# if there are more branches to be created, we need to add a /base
-	# onto this branch, or the subsequent ones will have problems.
-        if [ "$noinherit" = "f" ]; then
-
-            # one more check. if the last branch is a branch with an explicit branch
-            # point. We shouldn't do a /base, since that branch may not use our tree
-            # inheirtance structure at all.
-            branch_point=`cat $meta_dir/meta-series | grep -E "^# _branch_begin.*$who_is_last_branch" \
-                             | sed 's/^# _branch_begin //' | awk '{ print $2 }'`
-	    if [ "$who_is_last_branch" != "$suggested_name" ] && [ -z "$branch_point" ]; then
-		suggested_name="$suggested_name/base"
-	    fi
-	fi
-
-	# if we have already passed one branch (last_branch is non zero)
-	# then we should log that branch name in current. But if the last
-	# passed branch is a 'noinherit' branch, we won't do this since that
-	# means it's name should not appear in other branches
-	if [ -n "$last_passed_branch" ]; then
-	    noinherit_considered=$last_passed_branch
-	    for b in $noinherit_branches; do
-		noinherit_considered=`echo $noinherit_considered | sed "s%$b%%"`
-	    done
-	    #if [ -z "$noinherit_found" ]; then
-	        # if a branch has a child it will have been renamed 
-	        # <branch>/base, but in any new branch we create, we
-	        # don't want to be under <branch>/base, we want to 
-	        # be under <branch>, so we remove any instances of
-	        # 'base' that may be in the actual branch name
-		last_passed_clean=`echo $noinherit_considered | sed 's%/base%%g'`
-		if [ -n "$last_passed_clean" ]; then
-		    suggested_name=$last_passed_clean/$suggested_name
-		fi
-	    #fi
-	fi
-    fi
-
-    echo $suggested_name | sed 's%/\+%/%g'
-}
-
-sanitize_repo_for_branch()
-{
-    suggested_name=$1
-    
-    # Check to see if it would be possible to create this branch
-    target_sub_component=`dirname $suggested_name`
-    existing_branches=`git branch | sed -e 's%^.*\*\ *%%' -e 's%^\ *%%'`
-
-    # question #1: is there a branch with our (branch name - 1 dir chunk) ?
-    #              if yes, that branch needs to become $branch/base
-    if [ "$target_sub_component" != "." ]; then
-	for b in $existing_branches; do
-	    echo $b | grep -q -E "^$target_sub_component$"
-	    if [ $? -eq 0 ]; then
-		parent_rename=$b
-	    fi
-	done
-    fi
-
-    # question #2: is there a branch with our branch name with our name
-    #              as a component of it ? but not our exact branch
-    #              if yes, we must be $suggested_name/base    
-    for b in $existing_branches; do
-	echo $b | grep -q -E "^$suggested_name/"
-	if [ $? -eq 0 ]; then
-	    suggested_rename="$suggested_name/base"
-	fi
-    done
-
-    if [ -n "$suggested_rename" ]; then
-	suggested_name="$suggested_rename"
-    fi
-
-    if [ -n "$parent_rename" ]; then
-        git branch -M $parent_rename $parent_rename/base
-        # we also need to rename the patches directories
-        mkdir -p $meta_dir/patches/$parent_rename/base
-        mv $meta_dir/patches/$parent_rename/status $meta_dir/patches/$parent_rename/base 2> /dev/null
-        mv $meta_dir/patches/$parent_rename/series $meta_dir/patches/$parent_rename/base 2> /dev/null   
-    fi
-
-    echo $suggested_name
-}
-
-# preps for a new branch
-#   arg1: the branch name
-# uses:
-#   global: meta_dir
-# sets:
-#   global: series_file, patches_dir
-branch_prep()
-{
-    branch_name=$1
-
-    if [ ! -d $meta_dir/patches/$branch_name ]; then
-	mkdir -p $meta_dir/patches/$branch_name
-    fi
-
-    series_file=$meta_dir/patches/$branch_name/series
-    if [ -s $meta_dir/patches/$branch_name/series ]; then
-	cat $meta_dir/patches/$branch_name/series | tr -s / > $meta_dir/patches/$branch_name/series.old
-	rm -f $meta_dir/patches/$branch_name/series
-    fi
-    status_file=$meta_dir/patches/$branch_name/status
-    if [ -s $meta_dir/patches/$branch_name/status ]; then
-	cat $meta_dir/patches/$branch_name/status | tr -s / > $meta_dir/patches/$branch_name/status.old
-	rm -f $meta_dir/patches/$branch_name/status
-    fi
-
-    if [ ! -e $meta_dir/patches/$branch_name/series ]; then
-	touch $meta_dir/patches/$branch_name/series
-    fi
-    if [ ! -e $meta_dir/patches/$branch_name/status ]; then
-	touch $meta_dir/patches/$branch_name/status
-    fi
-
-    patches_dir=$meta_dir/patches/$branch_name
-}
-
-# If branch name inheritance is on, branches will be built up using
-# the notation: <branch><divider><branch>, where <divider> is typically
-# '/' and we end up with: parent/child
-#
-# If "branchname inheritance is off", just call them as they are in the
-# meta series, each branch is stand alone.
-#
-# If you futz with the branch naming here, have a look at "branchpoints" 
-# to make sure it still is OK.
-do_branch()
-{
-    args=$@
-    flags=
-    name=
-
-    # a running total used to know when we are on the leaf node
-    branch_count=$[$branch_count + 1]
-
-    for a in $args; do
-	case $a in
-	    -*) flags="$flags $a" ;;
-	    *) if [ -z "$name" ]; then
-		   name=$a
-	       else
-                   branchpoint=$a
-	       fi ;;
-        esac
-    done
-
-    local create=
-
-    # check the flags
-    echo "$flags" | grep -q "force"
-    if [ $? -eq 0 ]; then
-	force=force
-    fi
-    noinherit=f
-    echo "$flags" | grep -q "noinherit"
-    if [ $? -eq 0 ]; then
-	noinherit=t
-	noinherit_branches="$noinherit_branches $name"
-    fi
-
-    # if a branch point was passed, the name is fully qualified in the statement
-    if [ -z "$branchpoint" ]; then
-	name=`generate_branch_name $name $noinherit $last_branch`
-    fi
-
-    if [ "$force" = "force" ]; then
-	# if the branches have diverged (i.e. another force) and we don't
-	# have "multi_branch_divergence" then don't do anything
-	if [ -z "$branches_have_diverged" ] ||
-            ([ -n "$branches_have_diverged" ] && 
-	     [ -n "$multi_branch_divergence" ]); then
-	    branches_have_diverged=t
-	else
-	    return
-	fi
-    fi
-
-    git show-ref --quiet --verify -- "refs/heads/$name"
-    if [ $? -eq 1 ]; then
-	git show-ref --quiet --verify -- "refs/heads/$name/base"
-	if [ $? -eq 1 ]; then
-	    # branch doesn't exist. create it.
-	    create=t
-	else
-	    # we'll want to follow the base branch, so we switch the name
-	    name=$name/base
-	fi
-    fi
-
-    if [ -n "$create" ]; then
-	name=`sanitize_repo_for_branch $name`
-	
-        # it is possible that the sanitization phase renamed a branch, which
-	# means we no longer have to create something. 
-	git show-ref --quiet --verify -- "refs/heads/$name"
-	if [ $? -eq 0 ]; then
-	    create=
-	fi
-    fi
-
-    branch_prep $name
-
-    if [ -n "$create" ]; then
-	if [ "$vlevel" -eq 2 ]; then
-	    echo "      branch ===> $name"
-	fi
-
-	# branchpoint get's the last say about from where we branch
-	if [ -n "$branchpoint" ]; then
-	    pcommit=$branchpoint
-	fi
-
-	track_branch $last_branch
-
-	# we always checkout from the last point on the current branch
-	# for more fine grained branching git should be used directly
-	if [ -z "$force" ]; then
-	    git checkout -q -b $name 2> /dev/null
-	else
-	    git checkout -q -b $name $pcommit 2> /dev/null
-	fi
-	if [ $? -ne 0 ]; then
-	    echo "ERROR: could not checkout branch $name"
-	    exit 1
-	fi
-
-	active_patching=t
-    else
-	git checkout -q $name
-	if [ $? -ne 0 ]; then
-	    echo "ERROR: could not checkout branch $name"
-	    exit 1
-	fi
-
-	if [ "$vlevel" -eq 2 ]; then
-	    echo "      branch ===> $name (reuse)"
-	fi
-    fi
-
-    last_branch=$name
-}
-
-# removes any common prefixes from a name (path, patch, etc). With
-# these removed, the resulting name is now relative to a set of
-# search paths, and can be found later.
-_strip_common_prefix()
-{
-    in_name=$1
-
-    # this takes an input name and searches all known paths.
-    # the relocation that removes the MOST from the original is
-    # the one we want, since it is the best match by definition
-    out_len=${#in_name}
-    relocated_name=$in_name
-    for r in $rdirs; do
-        r=`clean_path $r`  
-	t=`echo $in_name | sed s%$r%%`
-	this_len=${#t}
-	if [ $this_len -lt $out_len ]; then
-	    relocated_name=$t
-	    out_len=$this_len
-	fi
-	# add a trailing slash to get corner cases where one may
-	# have been added or not dropped
-	t=`echo $in_name/ | sed s%$r%%`
-	this_len=${#t}
-	if [ $this_len -lt $out_len ]; then
-	    relocated_name=$t
-	    out_len=$this_len
-	fi
-    done
-
-    echo "/$relocated_name"
-}
-
-do_pending_patches()
-{
-    # if there isn't a series file, or we haven't seen any "patch" commands
-    # there's nothing to push, so exit early
-    if [ -z "$series_file" ] || [ -z "$last_patch_to_push" ]; then
-	return
-    fi
-
-    # if we aren't doing a treegen, then we can bail out early if our
-    # current branch isn't the leaf node/final branch
-    if [ -z "$active_patching" ]; then
-        if [ -z "$treegen" -a "$branch_count" != "$total_branches" ]; then
-	    return
-        fi
-    fi
-
-    patch_fencepost="$first_patch_to_push"
-    if [ -e "$meta_dir/.last_patch" ]; then
-
-        sentinel=`cat $meta_dir/.last_patch`
-        if [ -n "$sentinel" ]; then
-            grep -q $sentinel $series_file
-            if [ $? -eq 0 ]; then
-                # the sentinel patch is in the series .. but is it the last patch in the
-                # series ? If it is the last patch, we'll use that as the "sentinel" and 
-                # skip everything, since the series is fully applied
-                lines_after=`grep -A1 $sentinel $series_file`
-                if [ -z "$lines_after" ]; then
-                    if [ -n "$verbose" ]; then
-                        echo "Last patch sentinel file detected ($meta_dir/.last_patch)."
-                        echo "Patching will resume from that point: $sentinel"
-                    fi
-
-                    patch_fencepost="$sentinel"
-                fi
-            fi
-        fi
-    fi
-
-    if [ -n "$verbose" ]; then
-	flags="-v"
-    fi
-
-    if [ -n "_$continue" ]; then
-        flags="$flags -a"
-    fi
-
-    eval "KMETA=$meta_dir kgit-s2q -v -v --gen --patches `dirname $series_file` $patch_flags -- $patch_fencepost $_redir"
-    if [ $? -ne 0 ]; then
-	exit 1
-    fi
-
-    echo "$last_patch_to_push" > $meta_dir/.last_patch
-    last_patch_to_push=""
-}
-
-# conditionally push 
-do_patch()
-{
-    local name=$1
-    local push_patch=
-
-    local_name=`_strip_common_prefix $name | tr -s /`
-
-    if [ -n "$active_patching" ]; then
-	# cleanup the path a bit
-	name=`echo $name | sed 's%^\./%%g'`
-
-	push_patch=t
-
-	if [ ! -e $series_file ]; then
-	    touch $series_file
-	fi
-
-	if [ -n "$_skip" ]; then
-	    echo "`basename $local_name`" | grep -q -E "^$_skip"
-	    if [ $? -eq 0 ]; then
-		push_patch=
-	    fi
-	fi
-    fi
-
-    if [ -n "$push_patch" ]; then
-	added_to_series=
-
-	if [ -n "$verbose" ]; then
-	    if [ "$vlevel" -eq 2 ]; then
-		echo "         patch `basename $name` ($series_file)"
-	    else
-		progress_increment
-	    fi
-	fi
-
-        # get it into the series file
-	sname=`echo links/$local_name | sed s'%//%/%'`
-
-	grep -q -E "$local_name$" $series_file
-	if [ $? -ne 0 ]; then
-	    added_to_series=t
-	    echo $sname >> $series_file
-	    if [ -n "$meta_merged" ]; then
-		git update-index --assume-unchanged $series_file
-            fi
-	fi
-
-        # arrange for the patch to be locally available for application
-	if [ -n "$name" ] && [ -e "$name" ]; then
-	    patches_links_dirname=`dirname $sname`
-
-            # unify patches and config, this means that all .scc files
-	    # and their patches will be linked under the same directory
-	    # structure
-            relative_link_count=`echo $series_file | sed 's%^\./%%' | grep -o "/" | wc -l`
-	    if [ "$relative_link_count" == "0" ]; then
-		relative_dir="../../.."
-	    else
-		relative_dir=""
-		for c in `seq $relative_link_count`; do
-		    relative_dir="$relative_dir`echo -n ../`"
-		done
-	    fi
-
-	    if [ -d $patches_dir ] && [ ! -d $patches_dir/links ]; then
-    		$(  cd $patches_dir; 
-		    rm -f links
-		    ln -s $relative_dir/$meta_dir/cfg links
-		)
-	    fi
-	    if [ ! -d $patches_dir/$patches_links_dirname ]; then
-		mkdir -p $patches_dir/$patches_links_dirname
-	    fi
-
-	    if [ ! $name -ef $patches_dir/$sname ]; then
-		ln -sf $name $patches_dir/$sname
-	    fi
-
-	    if [ -n "$added_to_series" ]; then
-		track_patch $sname
-	    fi
-
-	    if [ -z "$last_patch_to_push" ]; then
-		first_patch_to_push=$sname
-	    fi
-	    last_patch_to_push=$sname
-
-	    if [ $? -ne 0 ]; then
-		exit 1
-	    fi
-	else
-	    echo "           *  warning: $name not found, not linking"
-	fi
-    fi
-}
-
-do_git()
-{
-    local cmd=$@
-
-    if [ ! "$_action" = "undo" ]; then
-	type=`echo $cmd | cut -d' ' -f1`
-	parm=`echo $cmd | cut -d' ' -f2`
-	case $type in
-	    tag)
-                 my_tag=$parm
-
-		 # Make sure that we don't duplicate a single tag across
-		 # multiple branches. This could happen if a series is
-		 # modified which triggers a force branch. That forked series
-		 # would try and use the same tag as the base branch, creating
-		 # a duplicate tag in the tree (which fails)
-	         if [ -n "$branches_have_diverged" ] && [ -z "no_force_tagging" ]; then
-		     my_tag="$parm-`basename $_meta_series -meta`"
-		 fi
-		 
-		 do_tag "$my_tag" "$my_tag"
-		 ;;
-	    branch)
-		# we have "branch <options>" in $@, shift "branch" off and pass it
-		# to our more intelligent do_branch
-		shift
-		do_branch $@
-		;;
-	    *) 
- 		 if [ "$vlevel" -eq 2 ]; then
-		     echo "      * issuing: git $cmd"
-		 fi
-
-		 eval git $cmd
-		 ret=$?
-		 if [ -z "$git_warn_only" ]; then
-		     if [ $ret -ne 0 ]; then
-			 echo "ERROR: could not complete git cmd \"git $cmd\""
-			 exit $ret
-		     fi
-		 fi
-		 ;;
-	esac
-    fi
-}
-
-_git()
-{
-    git_args=$@
-
-    do_pending_patches
-    do_git $git_args
-}
-
-_mark()
-{
-    input="$@"
-
-    echo $input | grep -q "patching start"
-    if [ $? -eq 0 ]; then
-        active_patching="t"
-    else
-        a=`echo $input | cut -d' ' -f2`
-        n=`echo $input | cut -d' ' -f1`
-        if [ "$a" = "start" ]; then
-	    do_pending_patches
-	    if [ "$vlevel" -eq 2 ]; then
-	        echo "   mark --> $n"
-	    fi
-        else
-            if [ "$vlevel" -eq 2 ]; then
-	        echo "   mark <-- $n"
-	    fi
-        fi
-    fi
-}
-
-_patch()
-{   
-    # if we aren't doing a treegen, then we can bail out early if our
-    # current branch isn't the leaf node/final branch
-    if [ -z "$active_patching" ]; then
-        if [ -z "$treegen" -a "$branch_count" != "$total_branches" ]; then
-	    return
-        fi
-    fi
-
-    if [ -n "$_stop_at" ]; then
-	echo $1 | grep -q -E "^$_stop_at"
-	if [ $? -eq 0 ]; then
-	    skip_to_end=t
-	fi
-    fi
-    if [ -z "$skip_to_end" ]; then
-	do_patch $1
-	if [ $? -ne 0 ]; then
-	    exit 1
-	fi
-    fi
-}
-
-_cfg()
-{
-    d=$1
-
-    do_cfg "$d"
-}
-
-_define()
-{
-    var=$1
-    value=$2
-
-    eval $var="\"$value\""
-}
-
-# arg 1 is always the branch name. There is then an optional
-# branch source, followed by flags. All flags start with -.
-# so we parse them out appropriately.
-_branch_begin()
-{
-    args=$@
-
-    do_pending_patches
-
-    # do branch will let us know if the branch
-    # already existed. 
-    do_branch $args
-    if [ -z "$active_patching" ]; then
-	fast_forward_to_next_branch=t
-    else
-	fast_forward_to_next_branch=
-    fi
-}
-
-_force_branch()
-{
-    _branch_begin -force $@
-}
-
-_reloc_dir()
-{
-    dir=$1
-
-    rdirs="$rdirs $dir/"
-}
-
-_kconf()
-{
-    do_kconf "$2"
-}
-
-wrap_meta_series()
-{
-    _series=$1
-    _valid_meta_cmds=$2
-
-    # reset the progress increment
-    pdone=1
-    ptotal=`grep patch $_series | wc -l`
-    _start=`date +"%s"`
-
-    # if no limitation was passed, allow all commands to be run
-    if [ -z "$_valid_meta_cmds" ]; then
-	_valid_commands="_cfg _mark _git _branch_begin _reloc_dir _kconf _force_branch _patch _define"
-    else
-	_valid_commands=$_valid_meta_cmds
-    fi
-    # generate a sed script
-    rm -f sed_script.cmds
-    for _cmd in $_valid_commands; do
-	echo "s/^# *\($_cmd\)/\1/g" >> sed_script.cmds
-    done
-
-    # uncomment the commands that we are willing to run
-    cat $_series | sed -f sed_script.cmds > $_series.wrap
-    rm -f sed_script.cmds
-
-    rm -f $meta_dir/cfg/master_series
-
-    total_branches=`cat $_series.wrap |grep ^_branch_begin |wc -l`
-
-    # now run the series
-    source $_series.wrap
-
-    # catch any remaining patches
-    do_pending_patches
-
-    _stop=`date +"%s"`
-    _duration=`expr $_stop - $_start`
-
-    if [ -n "$verbose" ]; then
-	if [ $vlevel -eq 2 ]; then
-	    echo ""
-	    echo "<=== processed $_meta_series in $_duration seconds"
-	else
-	    progress_done "in $_duration seconds"
-	fi
-    fi
-}
-
 # Checks that git is configured properly for merge/commit operations
 # If it isn't globally configured, the repository is configured locally
 # to allow commits to the repo
@@ -1046,133 +176,82 @@ if [ -n "$_rc_file" ] && [ -e "$_rc_file" ]; then
     done
 fi
 
-show_inheritance_in_branches=t
+# returns 0 if "branch" or "branch/base" already exists
+check_branch() {
+    local b=$1
 
-# determine the meta directory name. The meta directory is at the top level
-# of the repository, and is untracked.
-get_meta_dir()
-{
-    # if there's already a located and logged meta directory, just use that and
-    # return. Otherwise, we'll look around to see what we can find.
-    if [ -f ".metadir" ]; then
-        md=`cat .metadir`
-        echo $md
-        return
+    git show-ref --verify --quiet refs/heads/${b}
+    if [ $? -ne 0 ]; then
+        git show-ref --verify --quiet refs/heads/${b}/base
+        if [ $? -ne 0 ]; then
+            return 1
+        else
+            return 0
+        fi
+    else
+        return 0
     fi
-
-    # determine the meta directory name
-    meta_dir_options=`git ls-files -o --directory`
-    for m in $meta_dir_options; do
-	if [ -d "$m/cfg" ]; then
-	    md=`echo $m | sed 's%/%%'`
-	fi
-    done
-
-    # store our results where other scripts can quickly find the answer
-    if [ -n "$md" ]; then
-        echo "$md" > .metadir
-    fi
-
-    # return the directory to he caller
-    echo $md
 }
 
-meta_dir=`get_meta_dir`
-if [ -z "$meta_dir" ]; then
-    meta_dir=".meta"
-fi
 
-work_cfg_dir=$meta_dir/cfg
-hook_dir=$meta_dir/scripts
-# work dir is wherever we are running
-work_dir=$mypath
+meta_dir="$(dirname ${meta_series})"
+# process the meta series, line by line
+OLDIFS=${IFS}
+IFS='
+'
+for fline in `cat ${meta_series}`; do
+    case ${fline} in
+        patch*)
+            # do nothing at the moment
+            ;;
+        branch\ rename:*)
+            b=$(echo ${fline} | cut -d: -f2 | sed 's%^\ %%')
+            echo "[INFO]: branch rename: ${b}"
+            old=$(echo ${b} | cut -d' ' -f1)
+            new=$(echo ${b} | cut -d' ' -f2)
+            check_branch ${new}
+            if [ $? -ne 0 ]; then
+                eval git branch -m ${old} ${new}
+            else
+                echo "[INFO]: branch ${new} already exists"
+            fi
+            ;;
+        branch:*)
+            dopatch=
 
-#
-# init: creates and configures the git repository. should be
-#       safe to run more than once, but only if necessary
-#
-if [ -n "$_init" ]; then
-    if [ -n "$verbose" ]; then
-        echo "[INFO] initializing kernel repository . . ."
-    fi
+            b=$(echo ${fline} | cut -d: -f2 | sed 's%^\ %%')
+            check_branch ${b}
+            if [ $? -ne 0 ]; then
+                echo "[INFO]: branch create: ${b}"
+                eval git checkout -b ${b}
+                # clear any patch fence posts
+                rm -f .git/kgit-s2q.last
+                dopatch=t
+            else
+                echo "[INFO]: reusing branch ${b}"
+                if [ -n "${resume}" ]; then
+                    dopatch=t
+                fi
+            fi
 
-    mkdir -p $work_dir
-    mkdir -p $work_cfg_dir
-fi
+            if [ -n "${dopatch}" ]; then
+                # now check to see if there's a patch queue
+                qname="patch.${b}.queue"
+                qname="$(echo ${qname} | sed 's%/%.%g')"
+                if [ -e "${meta_dir}/${qname}" ]; then
+                    echo "[INFO]: patch queue \"${qname}\" detected, applying patches"
+                    rm -f ${meta_dir}/series
+                    ln -sf ${qname} ${meta_dir}/series
+                    kgit-s2q --gen -v --patches ${meta_dir}
+                    if [ $? -ne 0 ]; then
+                    exit 1
+                    fi
+                fi
+            fi
+            ;;
+        *)
+            ;;
+    esac
 
-if [ -n "$_meta_series" ]; then
-    if [ ! "$_meta_series" -ef "$meta_dir/meta-series" ]; then
-	cp $_meta_series $meta_dir/meta-series
+done
 
-	if [ $? != 0 ]; then
-	    echo "[ERROR]" cant copy $_meta_series to $meta_dir/meta-series
-	    exit 1
-	fi
-    fi
-fi
-
-get_hooks $meta_dir/meta-series
-
-#
-# patch: Actually runs the gathered meta data and applies
-#        patches to the tree
-#
-if [ -n "$_patch_apply" ]; then
-    if [ -n "$verbose" ]; then
-	echo "[INFO] validating against known patches  (`basename $_meta_series`)"
-    fi
-
-    git_sanity_check
-
-    # this will actually apply the patches and tag the tree
-    # process_meta_series "patch"
-    orig_branch=`get_current_git_branch`
-
-    if [ -n "$prepatch_scripts" ]; then
-	if [ -n "$verbose" ]; then
-	    echo "[INFO] running prepatch scripts"
-	fi
-	for s in $prepatch_scripts; do
-	    $hook_dir/$s
-	    ret=$?
-	    if [ $ret -ne 0 ]; then
-		if [ -e exit_msg ]; then
-		    cat exit_msg
-		fi
-		exit $ret
-	    fi
-	done
-    fi
-
-    branch_prep $orig_branch
-
-    # pass 1: interpret the meta series
-    wrap_meta_series $meta_dir/meta-series
-
-    if [ $? -ne 0 ]; then
-	exit 1
-    fi
-
-    # no longer required. This should be ensured by the caller, 
-    # not the script. But kept around as a temporary reference, since
-    # it may be come optional functionality going forward.
-    # git checkout -q $orig_branch
-    # r=$?
-    # if [ $r -ne 0 ]; then
-    # 	git checkout -q $orig_branch/base
-    # 	r=$?
-    # 	if [ $r -ne 0 ]; then
-    # 	    echo [ERROR] git checkout of \"$orig_branch\" failed
-    # 	    exit $r
-    # 	fi
-    # fi
-fi
-
-#
-# This option generates the list of patches (via scc processing) and dumps
-# them to stdout
-#
-if [ -n "$_dump" ]; then
-    ## todo. dump the meta series
-    true
-fi
