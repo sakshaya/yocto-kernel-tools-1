@@ -147,27 +147,14 @@ find_feature_descriptions()
 get_feat_list()
 {
     dir=$1
-    check_leaf=$2
 
     flist=$(find $dir -maxdepth 3 -regex '.*[a-zA-Z0-9_]*\.scc$')
     flist=$(echo "$flist" | sort)
     for f in $flist; do
-	if [ -n $check_leaf ]; then
-	    grep -q -e ".*scc_leaf.*" -e ".*define.*KTYPE" $f
-	    if [ $? -eq 0 ]; then
-		if [ -n "$leaf_flist" ]; then
-		    leaf_flist=`echo "$leaf_flist"; echo "$f"`
-		else
-		    leaf_flist=`echo "$f"`
-		fi
-	    fi
-	else
-	    if [ -n "$leaf_flist" ]; then
-		leaf_flist=`echo "$leaf_flist"; echo "$f"`
-	    else
-		leaf_flist=`echo "$f"`
-	    fi
-	fi
+	grep -q ".*define.*KTYPE" $f
+	if [ $? -eq 0 ]; then
+	    leaf_flist="$leaf_flist $f"
+        fi
     done
 
     echo "$leaf_flist"
@@ -210,14 +197,6 @@ while [ $# -gt 0 ]; do
 		;;
 	--meta-dir)
 		top_meta_dir="$2"
-		shift
-		;;
-	--meta-repo)
-		meta_repo="$2"
-		shift
-		;;
-	--meta-branch)
-		meta_branch="$2"
 		shift
 		;;
 	--src)
@@ -407,12 +386,6 @@ else
     # resuming
     old_pwd=`pwd`
 
-    if [ -n "$meta_repo" ]; then
-	top_meta_dir=".$top_meta_dir"
-	exec_dir=.$meta_dir/obj
-	meta_dir=.$meta_dir
-    fi
-
     if [ ! -d $output/$top_meta_dir/cfg/ ]; then
 	echo ERROR: something evil happened: $output/$top_meta_dir/cfg/ is gone
 	exit 1
@@ -436,12 +409,12 @@ search_dirs=$new_search_dirs
 find_executables()
 {
     old_pwd=`pwd`
-    cd $meta_dir
+    cd $top_meta_dir
     count=0
     exec_total=0
-    for d in `ls | grep \\\-meta`; do
-	f=`echo $d | sed 's/-meta//'`
-	executables="$executables $f"
+    possible=$(find . -name 'meta-series')
+    for d in $possible; do
+	executables="$executables $d"
 	count=$[$count+1]
 	exec_total=$[$exec_total+1]
     done
@@ -455,69 +428,29 @@ if [ -n "$resume" ]; then
 fi
 
 if [ -n "$init" ]; then
-    if [ -n "$full_build" ]; then
-	if [ ! -d $output/.git ]; then
-	    echo " phase # $phase_count) cloning source repository"
+    if [ ! -d $output/.git ]; then
+	echo " phase # $phase_count) cloning source repository"
 
-	    if [ -z "$base_ver" ]; then
-		echo "ERROR. No base branch version found, exiting"
-		exit 1
-	    fi
+	if [ -z "$base_ver" ]; then
+	    echo "ERROR. No base branch version found, exiting"
+	    exit 1
+	fi
 
-	    kgit-init --meta-dir $top_meta_dir --meta-branch $meta_branch -v $input $base_ver $output
-	    if [ $? -ne 0 ]; then
-		echo "ERROR. Unable to clone source repository $input"
-		exit 1
-	    fi
+	kgit-init -v $input $base_ver $output
+	if [ $? -ne 0 ]; then
+	    echo "ERROR. Unable to clone source repository $input"
+	    exit 1
+	fi
 
-	    (cd $output;
-		for f in `git ls-files -m`; do
-		    git add $f
-		done
-		git commit -s -m "kgit: creating baseline state"
-	    )
+	(cd $output;
+	 for f in `git ls-files -m`; do
+	     git add $f
+	 done
+	 git commit -s -m "kgit: creating baseline state"
+	)
 
-	    if [ -n "$meta_repo" ]; then
-		if [ -d "$output/$top_meta_dir/" ]; then
-			abs_dir=$(cd $meta_repo; pwd)
-
-			echo "[INFO] clearing existing meta data, and cloning repository"
-			old_top_dir=`pwd` 
-			cd $output
-			rm -rf $top_meta_dir
-
-			old_dir=`pwd`
-			cd $abs_dir
-			count=`git ls-files -dmo | wc -l`
-                        if [ $count -gt 0 ]; then
-			    echo "[ERROR] source meta repository is not clean, aborting"
-			    exit 1
-			fi
-			cd $old_dir
-			
-			git fetch $abs_dir master:$meta_branch
-			git checkout $meta_branch
-
-			git filter-branch --prune-empty --tree-filter "if [ ! -e $top_meta_dir/cfg/$meta_repo ]; then mkdir -p $top_meta_dir/cfg/$meta_repo; git ls-tree --name-only \$GIT_COMMIT | xargs -I files mv files $top_meta_dir/cfg/$meta_repo; fi"
-			git checkout master			
-
-			kgit-checkpoint -r -b $meta_branch
-			cd $old_top_dir
-
-			# fix search and inc dirs for the new, in-tree location			
-			top_meta_dir=".$top_meta_dir"
-			search_dirs="$new_search_dirs `cd $output/$top_meta_dir/cfg/$meta_repo; pwd`"
-			inc_dirs=""
-			for x in $search_dirs; do
-			    inc_dirs="$inc_dirs -I $x"
-			done
-			exec_dir=.$meta_dir/obj
-			meta_dir=.$meta_dir
-		fi
-	    fi
 	fi
 	let phase_count=$phase_count+1
-    fi
 fi
 
 if [ -z "$base_ver" ]; then
@@ -544,7 +477,7 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
 	    echo ""
 	    echo " phase # $phase_count) linking $dir"
 
-	    feat_list=`get_feat_list $dir t`
+	    feat_list=`get_feat_list $dir`
 	    total=$(echo "$feat_list" "$prep_feature_desc" | tr ' ' '\n' | wc -l)
 
 	    bops=
@@ -553,58 +486,52 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
 		if [ $? -eq 0 ]; then
 		    outname=`basename $f .scc`
 
-		    if [ ! -z "$BLACKLIST" ]; then
-		    	echo $BLACKLIST | grep -q "$outname"
-		    	if [ $? = 0 ]; then
-		    		echo Skipping $outname, since blacklisted
-		    		continue
-		    	fi
-		    fi
+                    if [ ! -z "$BLACKLIST" ]; then
+                        echo $BLACKLIST | grep -q "$outname"
+                        if [ $? = 0 ]; then
+                            echo Skipping $outname, since blacklisted
+                            continue
+                        fi
+                    fi
 
-		    if [ ! -z "$BLACKREGEX" ]; then
-		    	echo $outname | grep -q "$BLACKREGEX"
-		    	if [ $? = 0 ]; then
-		    		echo Skipping $outname, matches blacklisted regex \"$BLACKREGEX\"
-		    		continue
-		    	fi
-		    fi
+                    if [ ! -z "$BLACKREGEX" ]; then
+                        echo $outname | grep -q "$BLACKREGEX"
+                        if [ $? = 0 ]; then
+                            echo Skipping $outname, matches blacklisted regex \"$BLACKREGEX\"
+                            continue
+                        fi
+                    fi
 
-		    if [ ! -z "$WHITELIST" ]; then
-		    	echo $WHITELIST | grep -q "$outname"
-		    	if [ $? != 0 ]; then
-		    		echo Skipping $outname, since not explicitly whitelisted
-		    		continue
-		    	fi
-		    fi
+                    if [ ! -z "$WHITELIST" ]; then
+                        echo $WHITELIST | grep -q "$outname"
+                        if [ $? != 0 ]; then
+                            echo Skipping $outname, since not explicitly whitelisted
+                            continue
+                        fi
+                    fi
 
-		    if [ ! -z "$WHITEREGEX" ]; then
-		    	echo $outname | grep -q "$WHITEREGEX"
-		    	if [ $? != 0 ]; then
-		    		echo Skipping $outname - does not match whitelisted regex \"$WHITEREGEX\"
-		    		continue
-		    	fi
-		    fi
+                    if [ ! -z "$WHITEREGEX" ]; then
+                        echo $outname | grep -q "$WHITEREGEX"
+                        if [ $? != 0 ]; then
+                            echo Skipping $outname - does not match whitelisted regex \"$WHITEREGEX\"
+                            continue
+                        fi
+                    fi
 
 		    # this is where we put 'jcount' jobs into the background
-		    echo "   [$count/$total] scc --force -o $outname-meta $repo_dir `basename $f`"
+		    echo "   [$count/$total] scc -v -o $output/$exec_dir/$outname $inc_dirs --cmds branch,patch $f"
 		    (
-			if [ -n "$use_per_build_obj_dir" ]; then
-                            if [ ! -d $output/$exec_dir/$outname ];then
-				mkdir -p $output/$exec_dir/$outname
-                            fi 
-			    cd $output/$exec_dir/$outname
-			else
-			    cd $output/$exec_dir
-			fi
+                        if [ ! -d $output/$exec_dir/$outname ];then
+			    mkdir -p $output/$exec_dir/$outname
+                        fi
 
                         # the magic
-			scc --force -o $outname-meta $inc_dirs $repo_dir $f
+			scc -o $output/$exec_dir/$outname $inc_dirs --cmds branch,patch $f
 			if [ $? -ne 0 ]; then
 			    echo "ERROR: could not generate $outname-meta"
 			    echo $outname-meta >> $failed
 			    exit 1
 			fi
-			mv $outname-meta ../..
                     ) &
 		    op=$!
  		    bops="$bops $op"
@@ -618,7 +545,7 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
 			jcount=0
 		    fi
 
-		    executables="$executables $outname"
+		    executables="$executables $exec_dir/$outname/meta-series"
 		    let count=$count+1
 		    let exec_total=$exec_total+1
 		fi
@@ -634,10 +561,10 @@ if [ -n "$link" ] || [ -n "$compile" ]; then
 fi
 
 if [ -s "$failed" ]; then
-	echo ERROR: aborting due to meta series generation failure:
-	cat $failed
-	rm -f $failed
-	exit 1
+    echo ERROR: aborting due to meta series generation failure:
+    cat $failed
+    rm -f $failed
+    exit 1
 fi
 
 if [ -n "$apply" ]; then
@@ -667,37 +594,14 @@ if [ -n "$apply" ]; then
 		echo "Applying patches [$count/$total]"
 	    fi
 
-	    extra=
-	    echo $prep_features | grep -q -w $e
-	    if [ $? -eq 0 ]; then
-		echo "[INFO] prep feature found, full patch validation will be done"
-		extra=--continue
-	    fi
-
-            fbranches=`grep "_force_branch" $meta_dir/$e-meta | head -n 1 | cut -d' ' -f3`
-	    if [ -n "$fbranches" ]; then
-		git show-ref --quiet --verify -- "refs/heads/$fbranches"
-		if [ $? -eq 1 ]; then
-		    # a branch doesn't exist, we'll need a full run, but
-		    # make sure --continue isn't already in the flags
-		    echo $extra | grep -q "continue"
-		    if [ $? -eq 1 ]; then
-			extra="--continue"
-		    fi
-		fi
-            fi
 	    if [ -n "$verbose" ]; then
-		echo "running: KMETA=$top_meta_dir kgit-meta $vflags $extra --gen --apply $meta_dir/$e-meta"
+		echo "running: kgit-meta $vflags $meta_dir/$e-meta"
 	    fi
-	    KMETA=$top_meta_dir kgit-meta $vflags $extra --gen --apply $meta_dir/$e-meta
+	    kgit-meta $vflags $e
 
 	    if [ $? -ne 0 ]; then
 		echo "ERROR. Could not apply meta series $meta_dir/$e-meta"
 		exit 1
-	    fi
-	    if [ -n "$extra" ]; then
-		echo "[INFO] Updating cfg files (kgit-meta --update --kconf $meta_dir/$e-meta)"
-		kgit-meta --update --kconf $meta_dir/$e-meta
 	    fi
 	    
 	    git checkout $start_branch
@@ -710,8 +614,6 @@ if [ -n "$apply" ]; then
         # make the publish clean with respect to the last
         # meta series used
 	rm -f $top_meta_dir/meta-series
-
-	(cd $output; git config --global guilt.autotag 1)
     fi
 fi
 
