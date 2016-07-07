@@ -294,3 +294,36 @@ clean_path()
 
     echo $_p
 }
+
+clean_repo()
+{
+    if [ -n "$verbose" ]; then
+	echo "[INFO] cleaning base clone"
+    fi
+
+    if [ -d .git ]; then
+	# Keep tags that came from kernel.org; delete the rest, i.e.
+	# v3.nn, v2.6.nn and v2.6.nn-rcM and v2.6.nn.M (nn=10,11, ..99, M=0,1, ...99)
+	for tg in `git tag| grep -v 'v2.6.[0-9]\{2\}\(\(-rc[0-9]\{1,2\}\)\{0,1\}$\|\.[0-9]\{1,2\}$\)' |
+                            grep -v 'v3.[0-9]\{2\}\(\(-rc[0-9]\{1,2\}\)\{0,1\}$\|\.[0-9]\{1,2\}$\)' |
+                            grep -v 'v4.[0-9]\{2\}\(\(-rc[0-9]\{1,2\}\)\{0,1\}$\|\.[0-9]\{1,2\}$\)'`
+	do
+	    git tag -d $tg > /dev/null
+	done
+
+	# We've come here without an active checkout, on what was a bare
+	# clone, so manually make sure we are on master. We should be on
+	# master anyway, but make sure, otherwise we won't be able to
+	# delete whatever branch we are on.
+	echo 'ref: refs/heads/master' > .git/HEAD
+	for br in `git branch | grep -v '\* master$'`
+	do
+	    git branch -D $br > /dev/null
+	    if [ $? != 0 ]; then
+		echo "[ERROR]: delete of branch $br failed"
+		exit -1
+	    fi
+	done
+    fi
+}
+
