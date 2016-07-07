@@ -77,102 +77,113 @@ _commands()
 # take the entire command into an array
 raw_command=($@)
 
-non_dashed=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -v) verbose=t
-            ;;
-        --meta)
-            if [ -z "${non_dashed}" ]; then
-                meta=t
-                meta_dir
-                exit 0
-            fi
-            ;;
-        -h|--help)
-            if [ -z "${non_dashed}" ]; then
-                usage
-                exit
-            fi
-            ;;
-        --*)
-            # if the next argument is dashed, we just add $1 to our collection
-            # of dashed arguments. If $2 is NOT dashed, we assume it is a parameter
-            # to the --dashed option, and we grab it as well. Don't try and mix
-            # dashed and non-dashed, since we'll grab them!
-            case $2 in
-                --*)
-                    dashed="${dashed} $1"
-                    ;;
-                *)
-                    # sneak a : in between, so we can split it later
-                    dashed="${dashed} $1:$2"
-                    shift
-                    ;;
-            esac
-            ;;
-        *) non_dashed="${non_dashed} $1"
-           ;;
-    esac
-    shift
-done
+# are we being sourced ?
+script_name=$( basename $0 )
+this_script=$( basename ${BASH_SOURCE} )
+if [[ ${script_name} = ${this_script} ]] ; then
+    sourced=
+else
+    sourced=t
+fi
 
-# based off guilt's demux and other references
-if [ "`basename $0`" = "kgit" ]; then
-    # make an array from whatever was non-dashed
-    cmd_options_non_dashed=(${non_dashed})
-
-    cmd=
-    if [ ${#cmd_options_non_dashed[@]} -ne 0 ]; then
-        # take first arg, and try to execute it
-        arg="${cmd_options_non_dashed[0]}"
-        dir=`dirname $0`
-
-        if [ -x "$dir/kgit-$arg" ]; then
-            cmd=$arg
-        else
-            # might be a short handed
-            for command in $(_commands); do
-                case $command in
-                    $arg*)
-                    if [ -x "$dir/kgit-$command" ]; then
-                        cmd=$command
-                    fi
-                    ;;
+if [ -z "${sourced}" ]; then
+    non_dashed=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -v) verbose=t
+                ;;
+            --meta)
+                if [ -z "${non_dashed}" ]; then
+                    meta=t
+                    meta_dir
+                    exit 0
+                fi
+                ;;
+            -h|--help)
+                if [ -z "${non_dashed}" ]; then
+                    usage
+                    exit
+                fi
+                ;;
+            --*)
+                # if the next argument is dashed, we just add $1 to our collection
+                # of dashed arguments. If $2 is NOT dashed, we assume it is a parameter
+                # to the --dashed option, and we grab it as well. Don't try and mix
+                # dashed and non-dashed, since we'll grab them!
+                case $2 in
+                    --*)
+                        dashed="${dashed} $1"
+                        ;;
+                    *)
+                        # sneak a : in between, so we can split it later
+                        dashed="${dashed} $1:$2"
+                        shift
+                        ;;
                 esac
-            done
-        fi
-        if [ -n "$cmd" ]; then
-            # remove the first element, since that is our command. The rest are what
-            # we pass to the sub command.
-            sub_cmd_options=("${raw_command[@]:1}")
-            exec "$dir/kgit-$cmd" "${sub_cmd_options[@]}"
-
-            # this is not reached because of the exec
-            die "Exec failed! Something is terribly wrong!"
-	fi
-    fi
-
-    # no args passed or invalid command entered, just output help summary
-    usage
-    echo " Available commands: "
-    echo ""
-    echo -n "    "
-    count=0
-    for c in $(_commands); do
-	if [ $count -lt 7 ]; then
-	    echo -n "$c "
-	else
-	    echo "$c"
-	    count=0
-            echo -n "    "
-	fi
-	let count=$count+1
+                ;;
+            *) non_dashed="${non_dashed} $1"
+               ;;
+        esac
+        shift
     done
-    echo ""; echo ""
 
-    # now, let's exit
-    exit 1
+    # based off guilt's demux and other references
+    if [ "`basename $0`" = "kgit" ]; then
+        # make an array from whatever was non-dashed
+        cmd_options_non_dashed=(${non_dashed})
+
+        cmd=
+        if [ ${#cmd_options_non_dashed[@]} -ne 0 ]; then
+            # take first arg, and try to execute it
+            arg="${cmd_options_non_dashed[0]}"
+            dir=`dirname $0`
+
+            if [ -x "$dir/kgit-$arg" ]; then
+                cmd=$arg
+            else
+                # might be a short handed
+                for command in $(_commands); do
+                    case $command in
+                        $arg*)
+                            if [ -x "$dir/kgit-$command" ]; then
+                                cmd=$command
+                            fi
+                            ;;
+                    esac
+                done
+            fi
+            if [ -n "$cmd" ]; then
+                # remove the first element, since that is our command. The rest are what
+                # we pass to the sub command.
+                sub_cmd_options=("${raw_command[@]:1}")
+                exec "$dir/kgit-$cmd" "${sub_cmd_options[@]}"
+
+                # this is not reached because of the exec
+                die "Exec failed! Something is terribly wrong!"
+            fi
+        fi
+
+        # no args passed or invalid command entered, just output help summary
+        usage
+        echo " Available commands: "
+        echo ""
+        echo -n "    "
+        count=0
+        for c in $(_commands); do
+            if [ $count -lt 7 ]; then
+                echo -n "$c "
+            else
+                echo "$c"
+                count=0
+                echo -n "    "
+            fi
+            let count=$count+1
+        done
+        echo ""; echo ""
+
+        # now, let's exit
+        exit 1
+    fi
 fi
 
 
