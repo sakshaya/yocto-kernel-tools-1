@@ -2,7 +2,7 @@ kern_tools_LIST = kgit kgit-meta \
 		  kconf_check \
 		  get_defconfig scc \
 		  merge_config.sh spp kgit-s2q \
-		  symbol_why.pl
+		  symbol_why.py
 
 cmds := $(wildcard tools/scc-cmds/*)
 libs := Kconfiglib/kconfiglib.py
