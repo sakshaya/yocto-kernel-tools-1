@@ -465,12 +465,12 @@ if [ -n "$verbose" ] && [ -s $LOGDIR/redefinition.txt ]; then
 fi
 
 # One could argue that any mismatch is a valid reason to declare failure.
-# If that is what seems appropriate, then replace the sleep with an exit 1
 if [ -s $LOGDIR/mismatch.txt ]; then
     reported=t
 
     # if there was meta data, and hence hardware classifications, we only
-    # report those options as missing
+    # report those options as missing. We also shouldn't report any that
+    # were invalid, since that is reported separately.
     if [ -e "$LOGDIR/input_hardware_configs.cfg" ] || [ -e "$LOGDIR/input_required_configs.cfg" ]; then
         rm -f $LOGDIR/mismatch-hardware.txt
         cp $LOGDIR/mismatch.txt $LOGDIR/mismatch-all.txt
@@ -478,10 +478,27 @@ if [ -s $LOGDIR/mismatch.txt ]; then
 
         OPT_COUNT=0
         for opt in `cat $LOGDIR/mismatch.cfg`; do
+            report=
             grep -q -w $opt $LOGDIR/input_hardware_configs.cfg $LOGDIR/input_required_configs.cfg
             if [ $? -eq 0 ]; then
+                # so we know it was a hardware option, and we should likely report it, but lets
+                # do another check .. if it isn't invalid, we should report it. If it is in the
+                # invalid list we skip it
+                grep -q -w $opt $LOGDIR/invalid.cfg
+                if [ $? -ne 0 ]; then
+                    report=t
+                fi
+            fi
+
+            if [ -n "${report}" ]; then
                 let OPT_COUNT=$OPT_COUNT+1
+                echo "---------- $opt -----------------" >> $LOGDIR/mismatch.txt
                 grep -A4 "Config: $opt" $LOGDIR/mismatch-all.txt >> $LOGDIR/mismatch.txt
+
+                # drop CONFIG_ from the symbol name, since symbol_why doesn't expect it.
+                opt_to_check=$(echo $opt | sed 's%CONFIG_%%')
+                ARCH=x86 symbol_why.py --dotconfig=${dot_config} --ksrc="." --conditions $opt_to_check >> $LOGDIR/mismatch.txt
+                echo "" >> $LOGDIR/mismatch.txt
             fi
         done
         echo -n "[mismatch ($OPT_COUNT)]: "
