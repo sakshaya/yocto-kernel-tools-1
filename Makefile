@@ -1,9 +1,11 @@
 kern_tools_LIST = kgit kgit-meta \
 		  kconf_check \
 		  get_defconfig scc \
-		  merge_config.sh spp kgit-s2q
+		  merge_config.sh spp kgit-s2q \
+		  symbol_why.pl
 
 cmds := $(wildcard tools/scc-cmds/*)
+libs := Kconfiglib/kconfiglib.py
 
 INSTALL=install
 RM=rm
@@ -22,6 +24,9 @@ define echo_action
 endef
 define install_cmd
 	$(INSTALL) -m 0755 $(1) $(DESTDIR)/scc-cmds/;
+endef
+define install_lib
+	$(INSTALL) -m 0755 $(1) $(DESTDIR);
 endef
 define install_tool
 	$(INSTALL) -m 0755 tools/$(1) $(DESTDIR);
@@ -44,6 +49,7 @@ install:
 	@$(foreach tool,$(kern_tools_LIST),$(call install_tool,$(tool)))
 	@$(INSTALL) -d $(DESTDIR)/scc-cmds/
 	@$(foreach cmd,$(cmds),$(call install_cmd,$(cmd)))
+	@$(foreach lib,$(libs),$(call install_lib,$(lib)))
 	@$(MAKE_STAMP)
 
 clean:
