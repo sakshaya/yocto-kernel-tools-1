@@ -1,0 +1,1 @@
+KERNELVERSION=4.7-rc5 SRCARCH=x86 ARCH=x86 PYTHONPATH=./Kconfiglib: python Kconfiglib/examples/bruce_hack.py ./Kconfig
