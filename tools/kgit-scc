@@ -409,7 +409,6 @@ search_dirs=$new_search_dirs
 find_executables()
 {
     old_pwd=`pwd`
-    cd $top_meta_dir
     count=0
     exec_total=0
     possible=$(find . -name 'meta-series')
@@ -418,7 +417,6 @@ find_executables()
 	count=$[$count+1]
 	exec_total=$[$exec_total+1]
     done
-    cd $old_pwd
 }
 
 if [ -n "$resume" ]; then
@@ -595,12 +593,12 @@ if [ -n "$apply" ]; then
 	    fi
 
 	    if [ -n "$verbose" ]; then
-		echo "running: kgit-meta $vflags $meta_dir/$e-meta"
+		echo "running: kgit-meta $vflags $e"
 	    fi
 	    kgit-meta $vflags $e
 
 	    if [ $? -ne 0 ]; then
-		echo "ERROR. Could not apply meta series $meta_dir/$e-meta"
+		echo "ERROR. Could not apply meta series $e"
 		exit 1
 	    fi
 	    
