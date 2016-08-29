@@ -500,6 +500,12 @@ for i in `cat $SERIES | grep '^[a-zA-Z0-9_/]'`
 do
 	APPLIED=$[$APPLIED+1]
 
+	# store the last applied patch so we can resume later
+	if [ -f $GIT_DIR/kgit-s2q.last ]; then
+	    cp -f $GIT_DIR/kgit-s2q.last $GIT_DIR/kgit-s2q.previous
+	fi
+	echo $i > $GIT_DIR/kgit-s2q.last
+
 	if [ -n "$START" ]; then
 		echo $START | grep -qF $i
 		if [ $? -ne 0 ]; then
@@ -545,17 +551,12 @@ do
 		if [ $? = 0 ]; then
 			commit=$(git rev-parse HEAD)
 			echo $DIR/$i $commit >> $REFRESH
-
-			# store the last applied patch so we can resume later
-			echo $i > $GIT_DIR/kgit-s2q.last
 			continue
 		fi
 		git am --abort > /dev/null 2>&1
 		echo "[INFO]: Context reduced git-am of $DIR/$i with \"git am\" did not work, trying \"apply\"."
 	else
 		commit=$(git rev-parse HEAD)
-		# store the last applied patch so we can resume later
-		echo $i > $GIT_DIR/kgit-s2q.last
 		continue
 	fi
 
@@ -666,9 +667,6 @@ do
 		GIT_AUTHOR_DATE=""
 		SUBJECT=""
 	fi
-
-	# store the last applied patch so we can resume later
-	echo $i > $GIT_DIR/kgit-s2q.last
 done
 
 # if we've failed to locate $FENCE_POST in the series, and
